@@ -1,0 +1,93 @@
+# TERANODE — dev infrastructure stack (TimescaleDB + Redis + Mosquitto + Nginx)
+# Brought up by the P2 gate:  docker compose -f infra/docker-compose.yml up -d
+# Env is read from the root .env (copy .env.example -> .env).
+name: teranode
+
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: teranode-timescaledb
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-teranode}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-teranode}
+      POSTGRES_DB: ${POSTGRES_DB:-teranode}
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-teranode} -d ${POSTGRES_DB:-teranode}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    container_name: teranode-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: teranode-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -t '$$SYS/#' -C 1 -W 3 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  nginx:
+    image: nginx:alpine
+    container_name: teranode-nginx
+    restart: unless-stopped
+    # Opt-in only (it proxies to the host-run API, not a compose service):
+    #   docker compose --profile proxy up -d
+    profiles: ["proxy"]
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - timescaledb
+      - redis
+      - mosquitto
+
+  # Dev SMTP catcher — captures welcome emails so they can be inspected without a
+  # real mail provider. SMTP on 1025, web UI + REST API on http://localhost:8025.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: teranode-mailpit
+    restart: unless-stopped
+    ports:
+      - "${SMTP_HOST_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+
+volumes:
+  timescaledb_data:
+  redis_data:
+  mosquitto_data:
+  mosquitto_log:

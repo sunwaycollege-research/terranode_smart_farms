@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "TERANODE",
+    "slug": "teranode-app",
+    "version": "0.1.0",
+    "scheme": "teranode",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#f6f3ec",
+    "splash": {
+      "backgroundColor": "#f6f3ec",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.teranode.app"
+    },
+    "android": {
+      "package": "com.teranode.app"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": ["expo-router", "expo-secure-store", "expo-font"],
+    "experiments": { "typedRoutes": true },
+    "extra": {
+      "apiBaseUrl": "http://localhost:4000",
+      "useMockApi": true
+    }
+  }
+}

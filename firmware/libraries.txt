@@ -1,0 +1,7 @@
+# Libraries auto-installed by Wokwi (one per line, as named in the Arduino Library Manager).
+# If any single library causes a compile error, set its USE_* flag to 0 at the top of
+# sketch.ino and the firmware will fall back to a simulated value for that sensor.
+DHTesp
+OneWire
+DallasTemperature
+LiquidCrystal I2C

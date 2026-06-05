@@ -1,0 +1,72 @@
+/*
+ * TERANODE web design tokens — parchment + soil ink palette.
+ * Ported 1:1 from apps/mobile/src/theme/tokens.ts so web + mobile share a look.
+ */
+:root {
+  /* text / ink */
+  --ink: #1a1916;
+  --ink-soft: #3a352e;
+  --muted: #6b6457;
+  --subtle: #8a8275;
+
+  /* surfaces */
+  --bg: #f6f3ec;
+  --bg-warm: #efeadd;
+  --surface: #ffffff;
+  --surface-2: #f0ecdf;
+
+  /* borders */
+  --border: #d8d2c2;
+  --border-soft: #e6e0d0;
+  --border-strong: #b8b0a0;
+
+  /* brand */
+  --primary: #3f6b4e; /* deep forest/olive green */
+  --primary-soft: #e4efe2;
+  --primary-ink: #2f5740;
+  --accent: #bd6a43; /* terracotta */
+  --accent-soft: #f2e7da;
+
+  /* signal palette (status) */
+  --watering: #3f78c9;
+  --watering-soft: #e4edf7;
+  --healthy: #3fa564;
+  --healthy-soft: #e2f1e8;
+  --dry: #d9a23b;
+  --dry-soft: #f6ecd6;
+  --warn: #d99a2e;
+  --warn-soft: #f6ecd6;
+  --critical: #c14a3b;
+  --critical-soft: #f5e2dd;
+  --offline: #8a8275;
+
+  /* radii */
+  --r1: 6px;
+  --r2: 12px;
+  --r3: 16px;
+  --r4: 22px;
+  --pill: 9999px;
+
+  /* spacing scale */
+  --sp-xs: 4px;
+  --sp-sm: 8px;
+  --sp-md: 12px;
+  --sp-lg: 16px;
+  --sp-xl: 24px;
+  --sp-xxl: 32px;
+
+  /* elevation */
+  --e1: 0 2px 6px rgba(26, 25, 22, 0.06);
+  --e2: 0 8px 16px rgba(26, 25, 22, 0.1);
+  --e3: 0 18px 28px rgba(26, 25, 22, 0.16);
+
+  /* type families */
+  --font-display: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  --font-ui: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui,
+    sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, monospace;
+
+  /* layout */
+  --sidebar-w: 248px;
+  --topbar-h: 64px;
+}

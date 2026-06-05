@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "author": "TERANODE",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+
+    { "type": "wokwi-potentiometer", "id": "moist", "top": -180, "left": -260,
+      "attrs": { "label": "Soil Moisture" } },
+    { "type": "wokwi-potentiometer", "id": "ph", "top": -180, "left": -120,
+      "attrs": { "label": "pH probe" } },
+    { "type": "wokwi-potentiometer", "id": "npk", "top": -180, "left": 20,
+      "attrs": { "label": "NPK (N)" } },
+
+    { "type": "wokwi-dht22", "id": "dht", "top": -180, "left": 200,
+      "attrs": { "temperature": "26", "humidity": "55" } },
+    { "type": "wokwi-ds18b20", "id": "ds", "top": -40, "left": 240,
+      "attrs": { "temperature": "21" } },
+    { "type": "wokwi-resistor", "id": "r_ds", "top": -60, "left": 180,
+      "attrs": { "value": "4700" } },
+
+    { "type": "wokwi-pushbutton", "id": "rain", "top": 120, "left": -260,
+      "attrs": { "color": "blue", "label": "RAIN TIP" } },
+
+    { "type": "wokwi-led", "id": "lv", "top": 130, "left": 120,
+      "attrs": { "color": "green", "label": "ZONE VALVE" } },
+    { "type": "wokwi-led", "id": "lp", "top": 130, "left": 200,
+      "attrs": { "color": "blue", "label": "MAIN PUMP" } },
+    { "type": "wokwi-led", "id": "ld", "top": 130, "left": 280,
+      "attrs": { "color": "yellow", "label": "DOSING" } },
+    { "type": "wokwi-resistor", "id": "r1", "top": 100, "left": 110, "attrs": { "value": "220" } },
+    { "type": "wokwi-resistor", "id": "r2", "top": 100, "left": 190, "attrs": { "value": "220" } },
+    { "type": "wokwi-resistor", "id": "r3", "top": 100, "left": 270, "attrs": { "value": "220" } },
+
+    { "type": "wokwi-lcd1602", "id": "lcd", "top": 250, "left": 0,
+      "attrs": { "pins": "i2c" } }
+  ],
+  "connections": [
+    [ "moist:VCC", "esp:3V3", "red", [] ],
+    [ "moist:GND", "esp:GND.1", "black", [] ],
+    [ "moist:SIG", "esp:D34", "green", [] ],
+
+    [ "ph:VCC", "esp:3V3", "red", [] ],
+    [ "ph:GND", "esp:GND.1", "black", [] ],
+    [ "ph:SIG", "esp:D35", "green", [] ],
+
+    [ "npk:VCC", "esp:3V3", "red", [] ],
+    [ "npk:GND", "esp:GND.1", "black", [] ],
+    [ "npk:SIG", "esp:D32", "green", [] ],
+
+    [ "dht:VCC", "esp:3V3", "red", [] ],
+    [ "dht:GND", "esp:GND.1", "black", [] ],
+    [ "dht:SDA", "esp:D15", "blue", [] ],
+
+    [ "ds:VCC", "esp:3V3", "red", [] ],
+    [ "ds:GND", "esp:GND.1", "black", [] ],
+    [ "ds:DQ", "esp:D4", "blue", [] ],
+    [ "r_ds:1", "esp:3V3", "red", [] ],
+    [ "r_ds:2", "ds:DQ", "blue", [] ],
+
+    [ "rain:1.l", "esp:D27", "purple", [] ],
+    [ "rain:2.l", "esp:GND.2", "black", [] ],
+
+    [ "r1:1", "esp:D25", "green", [] ],
+    [ "r1:2", "lv:A", "green", [] ],
+    [ "lv:C", "esp:GND.2", "black", [] ],
+
+    [ "r2:1", "esp:D26", "blue", [] ],
+    [ "r2:2", "lp:A", "blue", [] ],
+    [ "lp:C", "esp:GND.2", "black", [] ],
+
+    [ "r3:1", "esp:D33", "gold", [] ],
+    [ "r3:2", "ld:A", "gold", [] ],
+    [ "ld:C", "esp:GND.2", "black", [] ],
+
+    [ "lcd:VCC", "esp:3V3", "red", [] ],
+    [ "lcd:GND", "esp:GND.2", "black", [] ],
+    [ "lcd:SDA", "esp:D21", "green", [] ],
+    [ "lcd:SCL", "esp:D22", "yellow", [] ]
+  ],
+  "dependencies": {}
+}

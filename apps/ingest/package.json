@@ -1,0 +1,28 @@
+{
+  "name": "@teranode/ingest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TERANODE MQTT ingest worker + virtual-gateway publisher (hardware-free telemetry).",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "virtual": "tsx src/virtual/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@teranode/agronomy": "*",
+    "@teranode/types": "*",
+    "dotenv": "^16.4.7",
+    "ioredis": "^5.4.2",
+    "mqtt": "^5.10.3",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.2",
+    "typescript": "~5.9.2"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "teranode",
+  "version": "0.2.0",
+  "private": true,
+  "description": "TERANODE — crop-driven smart irrigation + fertigation IoT SaaS. Monorepo: React Native customer app + React web admin + Express API + MQTT ingest + shared types/agronomy packages + ESP32 firmware + digital-twin simulator.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,ingest,web -c blue,magenta,cyan \"npm:dev:api\" \"npm:dev:ingest\" \"npm:dev:web\"",
+    "dev:api": "npm run -w @teranode/api dev",
+    "dev:ingest": "npm run -w @teranode/ingest dev",
+    "dev:web": "npm run -w @teranode/web dev",
+    "dev:mobile": "npm run -w @teranode/mobile web",
+    "infra:up": "docker compose -f infra/docker-compose.yml up -d",
+    "infra:down": "docker compose -f infra/docker-compose.yml down",
+    "migrate": "npm run -w @teranode/api migrate",
+    "seed": "npm run -w @teranode/api seed",
+    "typecheck": "npm run --ws --if-present typecheck",
+    "build": "npm run --ws --if-present build",
+    "test": "npm run --ws --if-present test",
+    "api": "npm run -w @teranode/api dev",
+    "ingest": "npm run -w @teranode/ingest dev",
+    "web": "npm run -w @teranode/web dev",
+    "mobile": "npm run -w @teranode/mobile start",
+    "mobile:web": "npm run -w @teranode/mobile web",
+    "mobile:android": "npm run -w @teranode/mobile android",
+    "mobile:ios": "npm run -w @teranode/mobile ios",
+    "simulator": "echo 'Open simulator/teranode-twin.html in any browser (double-click it).'"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

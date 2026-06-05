@@ -1,0 +1,25 @@
+# dependencies / build output (hoisted at root by npm workspaces)
+node_modules/
+dist/
+build/
+
+# expo
+.expo/
+.expo-shared/
+ios/
+android/
+expo-env.d.ts
+
+# logs / env
+*.log
+.env
+.env.local
+
+# editors / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# archived snapshots (kept locally, not committed)
+_archive/
