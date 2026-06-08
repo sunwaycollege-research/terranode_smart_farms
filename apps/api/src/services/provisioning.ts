@@ -28,7 +28,7 @@ const PROVISION_RETRY_SEC = 30;
 
 // Which channels live on a zone vs. on the farm (weather mast), + their units.
 const ZONE_CHANNELS: ChannelType[] = ['moisture', 'ph', 'ec', 'n', 'p', 'k', 'soiltemp'];
-const FARM_CHANNELS: ChannelType[] = ['airtemp', 'humidity', 'pressure', 'rain'];
+const FARM_CHANNELS: ChannelType[] = ['airtemp', 'humidity', 'pressure', 'rain', 'flow'];
 const DEFAULT_CHANNELS: ChannelType[] = ['moisture', 'ph', 'ec', 'soiltemp'];
 const UNIT: Record<ChannelType, string> = {
   moisture: '%',
@@ -42,6 +42,7 @@ const UNIT: Record<ChannelType, string> = {
   humidity: '%',
   pressure: 'hPa',
   rain: 'mm',
+  flow: 'L/min',
 };
 
 export interface ProvisionArgs {

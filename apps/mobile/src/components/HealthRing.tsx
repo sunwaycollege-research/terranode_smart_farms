@@ -10,13 +10,19 @@ import { T } from './ui';
  *
  * Renders a rounded arc proportional to the agronomy `score` with the centered
  * score number underneath an optional label. The color is derived from the
- * score band:
+ * score band (icon+colour coding for low-literacy farmers — green=good,
+ * amber=watch, red=act):
  *   >= 80  → healthy green
  *   50–79  → amber (dry/warn)
  *   <  50  → critical red
  *
  * Scale-aware: stroke + font scale with field mode unless an explicit `size`/
  * `stroke` is given. Use the small variant (size≈40) for the zone tiles.
+ *
+ * Polish: the track is a faint tint of the score colour (instead of flat grey)
+ * so a glance at the ring reads good/watch/act even before the number; the
+ * number is tabular mono and never font-scaled out of its circle; an a11y label
+ * voices the score for screen-reader / low-vision farmers.
  */
 export function healthColor(score: number): string {
   if (score >= 80) return colors.healthy;
@@ -30,7 +36,7 @@ export function HealthRing({
   stroke,
   label,
   showLabel = true,
-  trackColor = colors.surface2,
+  trackColor,
   scaleWithField = false,
 }: {
   /** 0..100 health score. */
@@ -43,6 +49,7 @@ export function HealthRing({
   label?: string;
   /** Hide the centered number/label entirely (badge-only ring). */
   showLabel?: boolean;
+  /** Override the (otherwise colour-tinted) track. */
   trackColor?: string;
   /** When true the diameter scales up in field mode. */
   scaleWithField?: boolean;
@@ -61,10 +68,18 @@ export function HealthRing({
   const small = dim < 64;
 
   return (
-    <View style={{ width: dim, height: dim, alignItems: 'center', justifyContent: 'center' }}>
+    <View
+      style={{ width: dim, height: dim, alignItems: 'center', justifyContent: 'center' }}
+      accessibilityRole="image"
+      accessibilityLabel={`${label ?? 'Health'}: ${pct}`}
+    >
       <Svg width={dim} height={dim}>
         <G rotation={-90} origin={`${dim / 2}, ${dim / 2}`}>
-          <Circle cx={dim / 2} cy={dim / 2} r={r} stroke={trackColor} strokeWidth={sw} fill="none" />
+          {trackColor ? (
+            <Circle cx={dim / 2} cy={dim / 2} r={r} stroke={trackColor} strokeWidth={sw} fill="none" />
+          ) : (
+            <Circle cx={dim / 2} cy={dim / 2} r={r} stroke={color} strokeWidth={sw} strokeOpacity={0.14} fill="none" />
+          )}
           <Circle
             cx={dim / 2}
             cy={dim / 2}
@@ -79,8 +94,17 @@ export function HealthRing({
       </Svg>
       {showLabel && (
         <View style={{ position: 'absolute', alignItems: 'center' }}>
-          <T style={{ fontFamily: fonts.mono, fontSize: numFont, color }}>{pct}</T>
-          {!small && label && <T variant="muted">{label}</T>}
+          <T
+            style={{ fontFamily: fonts.mono, fontSize: numFont, color, fontVariant: ['tabular-nums'], includeFontPadding: false }}
+            allowFontScaling={false}
+          >
+            {pct}
+          </T>
+          {!small && label && (
+            <T variant="muted" style={{ marginTop: 1 }}>
+              {label}
+            </T>
+          )}
         </View>
       )}
     </View>

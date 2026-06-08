@@ -1,7 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import { api } from '../api/client';
+import { api, setTokens, setOnTokensPersist, setUnauthorizedHandler } from '../api/client';
 import type { Account, PublicUser, UserRole } from '@teranode/types';
 
 /** Convenience alias for the two roles the mobile app cares about. */
@@ -9,6 +10,7 @@ export type Role = UserRole; // 'admin' | 'customer'
 
 export interface Session {
   token: string;
+  refreshToken: string | null;
   user: PublicUser;
   account: Account;
 }
@@ -40,6 +42,23 @@ async function clear() {
 }
 
 /**
+ * Drop all per-account DATA caches (e.g. the dashboard overview) on sign-out so a
+ * different account can never see the previous account's cached field data. UI
+ * PREFERENCES (language, field mode) are intentionally kept.
+ */
+async function clearDataCaches() {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const dataKeys = keys.filter(
+      (k) => k.startsWith('teranode.overview') || k.startsWith('teranode.cache'),
+    );
+    if (dataKeys.length) await AsyncStorage.multiRemove(dataKeys);
+  } catch {
+    /* ignore — cache clearing is best-effort */
+  }
+}
+
+/**
  * Normalise whatever the api/mock returns into the 2-role Session shape.
  * The mock still ships legacy multi-tier accounts/users; we collapse them to
  * the admin|customer model here so the rest of the app only ever sees 2 roles.
@@ -47,6 +66,7 @@ async function clear() {
 function normalizeSession(res: {
   token?: string;
   accessToken?: string;
+  refreshToken?: string | null;
   user: { id: string; accountId: string; email: string; name: string; role: string; locale?: string | null; createdAt?: string };
   account: { id: string; type: string; name: string; parentId: string | null; status?: string; plan?: string | null; locale?: string; createdAt?: string; updatedAt?: string };
 }): Session {
@@ -74,7 +94,12 @@ function normalizeSession(res: {
     createdAt: res.account.createdAt ?? now,
     updatedAt: res.account.updatedAt ?? now,
   };
-  return { token: res.token ?? res.accessToken ?? '', user, account };
+  return {
+    token: res.token ?? res.accessToken ?? '',
+    refreshToken: res.refreshToken ?? null,
+    user,
+    account,
+  };
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -85,25 +110,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const raw = await load();
-        if (raw) setSession(JSON.parse(raw));
+        if (raw) {
+          const s = JSON.parse(raw) as Session;
+          // A session saved while the app was in MOCK mode has a fake `mock.*`
+          // token the real API rejects (→ "could not load" + a mock profile).
+          // Drop it so the user logs in fresh against the live backend.
+          if (!s.token || s.token.startsWith('mock.')) {
+            await clear();
+            await clearDataCaches();
+          } else {
+            // Re-attach the tokens to the api client so requests are authed after a
+            // cold start (the in-memory token store is empty on boot).
+            setTokens(s.token, s.refreshToken ?? null);
+            setSession(s);
+          }
+        }
       } finally {
         setLoading(false);
       }
     })();
   }, []);
 
+  // Persist silently-refreshed tokens back to SecureStore + session state.
+  useEffect(() => {
+    setOnTokensPersist((access, refresh) => {
+      setSession((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev, token: access, refreshToken: refresh };
+        void save(JSON.stringify(next));
+        return next;
+      });
+    });
+    return () => setOnTokensPersist(null);
+  }, []);
+
+  // An unrecoverable 401 (dead/stale session) → clear it so the app routes back
+  // to login instead of getting stuck on an error screen with a bad token.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setTokens(null, null);
+      setSession(null);
+      void clear();
+      void clearDataCaches();
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
+
   const signIn = useCallback(async (email: string, password: string) => {
-    // api.login is owned by unit 5.M5 and will take (email, password); call it
-    // loosely so this unit typechecks against the current 1-arg mock signature.
-    const res = await (api.login as (e: string, p?: string) => Promise<unknown>)(email, password);
-    const s = normalizeSession(res as Parameters<typeof normalizeSession>[0]);
+    const res = await api.login(email, password);
+    const s = normalizeSession(res);
+    setTokens(s.token, s.refreshToken);
     setSession(s);
     await save(JSON.stringify(s));
   }, []);
 
   const signOut = useCallback(async () => {
+    await api.logout(); // revoke the refresh token server-side (best-effort)
+    setTokens(null, null);
     setSession(null);
     await clear();
+    await clearDataCaches(); // never leak one account's field data to the next
   }, []);
 
   const value = useMemo<AuthState>(

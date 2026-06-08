@@ -365,6 +365,8 @@ const STATEMENTS: string[] = [
   // New gateway statuses: 'claimed' (linked to a customer, pre-boot) + 'revoked'.
   `ALTER TYPE gw_status ADD VALUE IF NOT EXISTS 'claimed'`,
   `ALTER TYPE gw_status ADD VALUE IF NOT EXISTS 'revoked'`,
+  // New telemetry channel: flow meter (YF-S201) — L/min, for leak detection + usage.
+  `ALTER TYPE channel_type ADD VALUE IF NOT EXISTS 'flow'`,
   // Inventory + provisioning columns on gateways.
   `ALTER TABLE gateways ADD COLUMN IF NOT EXISTS model text`,
   `ALTER TABLE gateways ADD COLUMN IF NOT EXISTS claimed_at timestamptz`,

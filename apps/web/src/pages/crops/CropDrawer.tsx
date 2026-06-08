@@ -15,6 +15,7 @@ import type {
 import { Badge, Button, Select, Switch, TextField } from '../../components';
 import { api, ApiRequestError } from '../../api/client';
 import { BandEditor, isBandValid } from './BandEditor';
+import { FertilizerSchedule } from './FertilizerSchedule';
 import {
   blankBand,
   categoryLabel,
@@ -28,7 +29,7 @@ import {
   type Lang,
 } from './shared';
 
-type Tab = 'details' | 'stages';
+type Tab = 'details' | 'stages' | 'fertilizer';
 
 export interface CropDrawerProps {
   /** The crop to edit, or null when creating a brand-new crop. */
@@ -296,9 +297,30 @@ export function CropDrawer({ crop, mode, lang, onClose, onSaved }: CropDrawerPro
             >
               Stages
             </button>
+            <button
+              role="tab"
+              aria-selected={tab === 'fertilizer'}
+              className={tab === 'fertilizer' ? 'is-active' : ''}
+              onClick={() => setTab('fertilizer')}
+              disabled={mode === 'create'}
+              title={
+                mode === 'create'
+                  ? 'Create the crop first to see its fertilizer schedule.'
+                  : undefined
+              }
+            >
+              Fertilizer schedule
+            </button>
           </div>
 
-          {error ? <div className="cr-formerror">{error}</div> : null}
+          {error ? (
+            <div className="tn-alert tn-alert--danger" role="alert">
+              <span className="tn-alert__icon" aria-hidden>
+                ⚠
+              </span>
+              <div className="tn-alert__body">{error}</div>
+            </div>
+          ) : null}
 
           {tab === 'details' ? (
             <DetailsTab
@@ -311,7 +333,7 @@ export function CropDrawer({ crop, mode, lang, onClose, onSaved }: CropDrawerPro
               setAcceptable={setAcceptable}
               disabled={saving}
             />
-          ) : (
+          ) : tab === 'stages' ? (
             <StagesTab
               stages={stages}
               openStage={openStage}
@@ -321,7 +343,9 @@ export function CropDrawer({ crop, mode, lang, onClose, onSaved }: CropDrawerPro
               addStage={addStage}
               disabled={saving}
             />
-          )}
+          ) : editingId ? (
+            <FertilizerSchedule cropId={editingId} />
+          ) : null}
         </div>
 
         <footer className="cr-drawer__foot">
@@ -330,19 +354,21 @@ export function CropDrawer({ crop, mode, lang, onClose, onSaved }: CropDrawerPro
               ? mode === 'create'
                 ? 'Saving creates the crop, then open it again to set per-stage bands.'
                 : 'Whole-crop fallback bands (used before a stage applies).'
-              : stagesDirty
-                ? 'Unsaved stage changes.'
-                : 'Per-stage agronomic targets.'}
+              : tab === 'stages'
+                ? stagesDirty
+                  ? 'Unsaved stage changes.'
+                  : 'Per-stage agronomic targets.'
+                : 'Regional fertilizer references — read-only, not a prescription.'}
           </span>
           <span className="tn-spacer" />
           <Button variant="ghost" onClick={onClose} disabled={saving}>
-            Cancel
+            {tab === 'fertilizer' ? 'Close' : 'Cancel'}
           </Button>
           {tab === 'details' ? (
             <Button onClick={saveDetails} loading={saving} disabled={!metaValid}>
               {mode === 'create' ? 'Create crop' : 'Save changes'}
             </Button>
-          ) : (
+          ) : tab === 'stages' ? (
             <Button
               onClick={saveStages}
               loading={saving}
@@ -350,7 +376,7 @@ export function CropDrawer({ crop, mode, lang, onClose, onSaved }: CropDrawerPro
             >
               Save stages
             </Button>
-          )}
+          ) : null}
         </footer>
       </aside>
     </div>
@@ -442,12 +468,18 @@ function DetailsTab(props: {
         />
       </div>
 
-      <div>
-        <div className="cr-subhead">Ideal band</div>
+      <div className="cr-section">
+        <div className="cr-section__head">
+          <div className="cr-subhead">Ideal band</div>
+          <span className="cr-hint">Target range for healthy growth</span>
+        </div>
         <BandEditor band={ideal} onChange={setIdeal} disabled={disabled} />
       </div>
-      <div>
-        <div className="cr-subhead">Acceptable band (wider)</div>
+      <div className="cr-section">
+        <div className="cr-section__head">
+          <div className="cr-subhead">Acceptable band</div>
+          <span className="cr-hint">Wider tolerance before alerts trigger</span>
+        </div>
         <BandEditor band={acceptable} onChange={setAcceptable} disabled={disabled} />
       </div>
     </>
@@ -469,7 +501,12 @@ function StagesTab(props: {
     props;
 
   if (stages === null) {
-    return <p className="tn-muted">Loading stages…</p>;
+    return (
+      <div className="tn-state" role="status" aria-live="polite">
+        <span className="tn-spinner tn-spinner--lg" aria-hidden />
+        <span className="tn-state__title">Loading stages…</span>
+      </div>
+    );
   }
 
   const sorted = [...stages].sort((a, b) => a.startDay - b.startDay);
@@ -477,23 +514,48 @@ function StagesTab(props: {
   return (
     <>
       {sorted.length === 0 ? (
-        <p className="tn-muted">
-          No growth stages yet. Add one to define stage-specific targets.
-        </p>
+        <div className="tn-state">
+          <span className="tn-state__icon" aria-hidden>
+            🌿
+          </span>
+          <span className="tn-state__title">No growth stages yet</span>
+          <p className="tn-state__body">
+            Add a stage to define stage-specific agronomic targets.
+          </p>
+          <div className="tn-state__actions">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={addStage}
+              disabled={disabled}
+            >
+              + Add stage
+            </Button>
+          </div>
+        </div>
       ) : (
         sorted.map((s) => {
           const open = openStage === s._key;
           return (
-            <div className="cr-stage" key={s._key}>
-              <div
+            <div className={`cr-stage${open ? ' is-open' : ''}`} key={s._key}>
+              <button
+                type="button"
                 className="cr-stage__head"
+                aria-expanded={open}
                 onClick={() => setOpenStage(open ? null : s._key)}
               >
-                <span className={`cr-stage__caret${open ? ' is-open' : ''}`}>▶</span>
+                <span
+                  className={`cr-stage__caret${open ? ' is-open' : ''}`}
+                  aria-hidden
+                >
+                  ▶
+                </span>
                 <span className="cr-stage__name">{stageLabel(s.stage)}</span>
                 <span className="tn-spacer" />
-                <span className="cr-stage__day">day {s.startDay}</span>
-              </div>
+                <span className="cr-stage__day">
+                  {Number.isFinite(s.startDay) ? `day ${s.startDay}` : 'day —'}
+                </span>
+              </button>
               {open ? (
                 <div className="cr-stage__body">
                   <div className="cr-form-grid">
@@ -537,8 +599,13 @@ function StagesTab(props: {
                     </div>
                   </div>
 
-                  <div>
-                    <div className="cr-subhead">Ideal band</div>
+                  <div className="cr-section">
+                    <div className="cr-section__head">
+                      <div className="cr-subhead">Ideal band</div>
+                      <span className="cr-hint">
+                        Target range for this stage
+                      </span>
+                    </div>
                     <BandEditor
                       band={s.ideal}
                       onChange={(b) =>
@@ -547,8 +614,11 @@ function StagesTab(props: {
                       disabled={disabled}
                     />
                   </div>
-                  <div>
-                    <div className="cr-subhead">Acceptable band</div>
+                  <div className="cr-section">
+                    <div className="cr-section__head">
+                      <div className="cr-subhead">Acceptable band</div>
+                      <span className="cr-hint">Wider tolerance</span>
+                    </div>
                     <BandEditor
                       band={s.acceptable}
                       onChange={(b) =>
@@ -575,11 +645,23 @@ function StagesTab(props: {
           );
         })
       )}
-      <div className="tn-row">
-        <Button variant="secondary" size="sm" onClick={addStage} disabled={disabled}>
-          + Add stage
-        </Button>
-      </div>
+      {sorted.length > 0 ? (
+        <div className="tn-row">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={addStage}
+            disabled={disabled}
+          >
+            + Add stage
+          </Button>
+          <span className="tn-spacer" />
+          <span className="cr-hint">
+            {sorted.length} {sorted.length === 1 ? 'stage' : 'stages'} ·
+            ordered by start day
+          </span>
+        </div>
+      ) : null}
     </>
   );
 }

@@ -12,7 +12,7 @@
 // screen targets an existing zone id (re-assign) when navigated with ?zoneId, or
 // resolves the customer's farm + first zone when opened as a plain "Add zone".
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import type {
@@ -23,12 +23,13 @@ import type {
   Range,
 } from '@teranode/types';
 import { currentStage, deriveRule, getCrop } from '@teranode/agronomy';
-import { Button, Card, CardTitle, Pill, Screen, T, Toggle } from '../../../src/components/ui';
+import { Button, Card, CardTitle, Divider, Pill, Screen, T, Toggle } from '../../../src/components/ui';
 import { CropPicker, climateFit } from '../../../src/components/CropPicker';
 import { api } from '../../../src/api/client';
+import { useAuth } from '../../../src/auth/AuthContext';
 import { useT, type TranslationKey } from '../../../src/i18n';
 import { useScale } from '../../../src/theme/scale';
-import { colors, fonts, radius, spacing } from '../../../src/theme/tokens';
+import { colors, elevation, fonts, radius, spacing } from '../../../src/theme/tokens';
 
 /* ---------------------------------------------------------------------------
  * sensor channels offered at bind time (engine key ↔ DB channel_type)
@@ -88,9 +89,17 @@ function fmtRange([lo, hi]: Range, unit: string): string {
  * ------------------------------------------------------------------------- */
 
 function Stepper({ step }: { step: 0 | 1 | 2 }) {
-  const { fs } = useScale();
+  const { fs, sp } = useScale();
+  // Dot + bar scale with field mode so the progress rail stays legible outdoors.
+  const dotSize = sp(30);
+  const barH = sp(3);
   return (
-    <View style={s.stepper}>
+    <View
+      style={[s.stepper, { paddingVertical: sp(spacing.xs) }]}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityValue={{ min: 1, max: 3, now: step + 1 }}
+    >
       {[0, 1, 2].map((i) => {
         const done = i < step;
         const active = i === step;
@@ -99,21 +108,32 @@ function Stepper({ step }: { step: 0 | 1 | 2 }) {
             <View
               style={[
                 s.stepDot,
-                done && { backgroundColor: colors.primary, borderColor: colors.primary },
-                active && { borderColor: colors.primary },
+                { width: dotSize, height: dotSize, borderRadius: dotSize / 2 },
+                done && { backgroundColor: colors.primary, borderColor: colors.primary, ...elevation.e1 },
+                // Active gets a stronger ring + soft fill so the current step pops
+                // against the parchment bg in sunlight.
+                active && { borderColor: colors.primary, borderWidth: 2, backgroundColor: colors.primarySoft, ...elevation.e1 },
               ]}
             >
               <T
                 style={{
-                  fontFamily: fonts.mono,
-                  fontSize: fs(12),
-                  color: done ? '#fff' : active ? colors.primary : colors.subtle,
+                  fontFamily: active ? fonts.uiSemibold : fonts.mono,
+                  fontSize: fs(13),
+                  color: done ? colors.onColor : active ? colors.primaryInk : colors.subtle,
                 }}
               >
                 {done ? '✓' : i + 1}
               </T>
             </View>
-            {i < 2 && <View style={[s.stepBar, i < step && { backgroundColor: colors.primary }]} />}
+            {i < 2 && (
+              <View
+                style={[
+                  s.stepBar,
+                  { marginHorizontal: sp(6), height: barH, borderRadius: barH / 2 },
+                  i < step && { backgroundColor: colors.primary },
+                ]}
+              />
+            )}
           </View>
         );
       })}
@@ -128,61 +148,112 @@ function Stepper({ step }: { step: 0 | 1 | 2 }) {
 type Step = 0 | 1 | 2;
 
 export default function NewZone() {
+  const { session } = useAuth();
   const { t, lang } = useT();
-  const { fs, sp } = useScale();
+  const { fs, sp, lh, touch } = useScale();
   const params = useLocalSearchParams<{ zoneId?: string; farmId?: string }>();
+
+  // The signed-in customer; everything we load is scoped to this account by the
+  // API. We also key any per-account concerns off it so one farmer can never see
+  // another customer's data (serials, zones, crops).
+  const accountId = session?.account.id ?? null;
 
   // --- wizard state ---------------------------------------------------------
   const [step, setStep] = useState<Step>(0);
   const [crops, setCrops] = useState<CropRef[]>([]);
   const [cropsLoading, setCropsLoading] = useState(true);
+  const [cropsError, setCropsError] = useState<string | null>(null);
   const [crop, setCrop] = useState<CropRef | null>(null);
   const [zoneName, setZoneName] = useState('');
   const [plantISO, setPlantISO] = useState<string>(toISODate(new Date()));
-  const [nodeSerial, setNodeSerial] = useState('TN-ESP32-0001 · node-A');
+  // No hardcoded serial: the field starts EMPTY and is prefilled from the
+  // customer's real gateway (api.gateway(farmId)?.serial) once resolved.
+  const [nodeSerial, setNodeSerial] = useState('');
   const [chOn, setChOn] = useState<Record<string, boolean>>(
     Object.fromEntries(CHANNEL_OPTIONS.map((c) => [c.type, c.on])),
   );
 
+  // CREATE mode (no ?zoneId) = the farmer is adding a NEW zone (capped by the
+  // zoneNodes entitlement they purchased). ASSIGN mode (?zoneId) = pick a crop
+  // for an existing zone (e.g. from the "this zone needs a crop" prompt).
+  const isCreate = !params.zoneId;
+
   // resolved assignment target (existing zone id) + node id
   const [zoneId, setZoneId] = useState<string | null>(params.zoneId ?? null);
   const [nodeId, setNodeId] = useState<string | undefined>(undefined);
+  const [farmId, setFarmId] = useState<string | null>(params.farmId ?? null);
+  // Zone quota = how many sensor nodes the customer bought (zoneNodes) vs zones used.
+  const [zoneCap, setZoneCap] = useState<number | null>(null);
+  const [zoneCount, setZoneCount] = useState(0);
+  // Whether the customer actually has a farm set up (brand-new accounts
+  // can return []). Null = still resolving.
+  const [hasFarm, setHasFarm] = useState<boolean | null>(params.zoneId ? true : null);
 
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<AssignZoneResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // --- load crops + resolve the target zone/node ---------------------------
+  // --- load crops (with its own loading/error so we can offer a Retry) ------
+  const loadCrops = useCallback(async () => {
+    setCropsLoading(true);
+    setCropsError(null);
+    try {
+      setCrops(await api.crops());
+    } catch (e) {
+      setCrops([]);
+      setCropsError(e instanceof Error ? e.message : t('common.error'));
+    } finally {
+      setCropsLoading(false);
+    }
+  }, [t]);
+
   useEffect(() => {
+    void loadCrops();
+  }, [loadCrops]);
+
+  // --- resolve the farm, node serial + the zone quota -----------------------
+  useEffect(() => {
+    let alive = true;
     (async () => {
-      try {
-        const list = await api.crops();
-        setCrops(list);
-      } catch {
-        setCrops([]);
-      } finally {
-        setCropsLoading(false);
+      // ASSIGN mode: an explicit ?zoneId — just pick a crop for that zone.
+      if (params.zoneId) {
+        setHasFarm(true);
+        return;
       }
-      // Resolve a target zone when none was passed in: first farm → first zone.
+      // CREATE mode: resolve the farm, count existing zones vs the purchased
+      // zoneNodes cap, and prefill the new zone name + the real device serial.
       try {
-        if (!params.zoneId) {
-          const farms = await api.farms();
-          const farmId = params.farmId ?? farms[0]?.id;
-          if (farmId) {
-            const zs = await api.zones(farmId);
-            const target = zs[0];
-            if (target) {
-              setZoneId(target.id);
-              setZoneName((prev) => prev || target.name);
-              if (target.nodeId) setNodeId(target.nodeId);
-            }
-          }
+        const farms = await api.farms();
+        const resolvedFarm = params.farmId ?? farms[0]?.id ?? null;
+        if (!resolvedFarm) {
+          if (alive) setHasFarm(false); // brand-new account: no farm yet
+          return;
         }
+        const [zs, gateway, ents] = await Promise.all([
+          api.zones(resolvedFarm),
+          api.gateway(resolvedFarm).catch(() => null),
+          api.entitlements().catch(() => null),
+        ]);
+        if (!alive) return;
+        setFarmId(resolvedFarm);
+        setHasFarm(true);
+        setZoneCount(zs.length);
+        const cap = ents && typeof ents.values.zoneNodes === 'number' ? ents.values.zoneNodes : null;
+        setZoneCap(cap);
+        // Default name for the new zone (farmer can rename); never a hardcoded sample.
+        setZoneName((prev) => prev || `Zone ${zs.length + 1}`);
+        if (gateway?.serial) setNodeSerial((prev) => prev || gateway.serial);
       } catch {
-        /* leave unresolved; submit will surface a friendly error */
+        if (alive) setHasFarm(null);
       }
     })();
-  }, [params.zoneId, params.farmId]);
+    return () => {
+      alive = false;
+    };
+  }, [params.zoneId, params.farmId, accountId]);
+
+  // In create mode, the farmer is out of nodes when zones used ≥ the purchased cap.
+  const atCap = isCreate && zoneCap !== null && zoneCount >= zoneCap;
 
   const fit = crop ? climateFit(crop) : null;
   const enabledChannels = useMemo(
@@ -216,14 +287,30 @@ export default function NewZone() {
 
   async function submit() {
     if (!crop) return;
-    if (!zoneId) {
-      setError(t('common.error'));
-      return;
-    }
     setSubmitting(true);
     setError(null);
     try {
-      const res = await api.assignZone(zoneId, {
+      // CREATE mode: make the new zone first (server enforces the zoneNodes cap),
+      // then assign the chosen crop to it. ASSIGN mode: use the existing zone.
+      let targetZoneId = zoneId;
+      if (isCreate) {
+        if (!farmId) {
+          setError(t('assign.noFarmBody'));
+          setSubmitting(false);
+          return;
+        }
+        const newZone = await api.createZone({
+          farmId,
+          name: zoneName.trim() || `Zone ${zoneCount + 1}`,
+        });
+        targetZoneId = newZone.id;
+      }
+      if (!targetZoneId) {
+        setError(t('common.error'));
+        setSubmitting(false);
+        return;
+      }
+      const res = await api.assignZone(targetZoneId, {
         cropId: crop.id,
         plantingDate: plantISO,
         nodeId,
@@ -239,6 +326,14 @@ export default function NewZone() {
 
   const canNext = step === 0 ? !!crop : true;
 
+  // Plain-language title per step — reuses existing keys so low-literacy farmers
+  // always see "Step N of 3 · <what this step is>" under the progress rail.
+  const stepTitleKey: Record<Step, TranslationKey> = {
+    0: 'assign.pickCrop',
+    1: 'assign.plantingDate',
+    2: 'assign.bindNode',
+  };
+
   // ==========================================================================
   // SUCCESS STATE
   // ==========================================================================
@@ -249,12 +344,16 @@ export default function NewZone() {
     return (
       <Screen>
         <Stack.Screen options={{ headerShown: false, title: t('assign.title') }} />
-        <View style={s.successHero}>
-          <T style={{ fontSize: fs(46) }}>{crop?.emoji ?? '🌱'}</T>
-          <T variant="display" style={{ textAlign: 'center' }}>
+        <View style={[s.successHero, { gap: sp(spacing.sm), paddingVertical: sp(spacing.md) }]}>
+          <View style={[s.successBadge, { width: sp(76), height: sp(76), borderRadius: sp(38) }]}>
+            <T style={{ fontSize: fs(42) }} accessibilityElementsHidden importantForAccessibility="no">
+              {crop?.emoji ?? '🌱'}
+            </T>
+          </View>
+          <T variant="display" style={{ textAlign: 'center' }} accessibilityRole="header">
             {result.zone.name}
           </T>
-          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <View style={{ flexDirection: 'row', gap: sp(spacing.xs), flexWrap: 'wrap', justifyContent: 'center' }}>
             <Pill label={cropName} color={colors.primary} dot />
             {summary && (
               <Pill
@@ -295,9 +394,15 @@ export default function NewZone() {
               {r.ecTarget != null ? `≈ ${r.ecTarget} mS/cm` : '—'}
             </T>
           </View>
-          <T variant="muted" style={{ marginTop: 4 }}>
-            {lang === 'ne' ? 'बाली अनुसारको नियम स्वतः लागू भयो।' : 'Crop-derived rule applied automatically.'}
-          </T>
+          <Divider style={{ marginTop: sp(spacing.xs) }} />
+          <View style={[s.noteRow, { gap: sp(spacing.xs) }]}>
+            <T style={{ fontSize: fs(13) }} accessibilityElementsHidden importantForAccessibility="no">
+              ✓
+            </T>
+            <T variant="muted" style={{ flex: 1, color: colors.healthyInk, lineHeight: lh(12) }}>
+              {lang === 'ne' ? 'बाली अनुसारको नियम स्वतः लागू भयो।' : 'Crop-derived rule applied automatically.'}
+            </T>
+          </View>
         </Card>
 
         {/* full ideal band for this stage */}
@@ -324,9 +429,10 @@ export default function NewZone() {
               <T variant="label" tx="zone.airTemp" />
               <T variant="mono">{fmtRange(band.airTemp, '°C')}</T>
             </View>
-            <View style={[s.bandRow, { borderTopWidth: 1, borderTopColor: colors.borderSoft, paddingTop: 8 }]}>
+            <Divider style={{ marginTop: sp(spacing.xs) }} />
+            <View style={[s.bandRow, { paddingTop: sp(spacing.xs) }]}>
               <T variant="muted">{t('assign.channels')}</T>
-              <T variant="muted">{result.channels.length}</T>
+              <T variant="mono" style={{ color: colors.primaryInk }}>{result.channels.length}</T>
             </View>
           </Card>
         )}
@@ -341,34 +447,142 @@ export default function NewZone() {
   }
 
   // ==========================================================================
+  // EMPTY STATE — brand-new account with no farm/zone set up yet.
+  // ==========================================================================
+  if (hasFarm === false) {
+    return (
+      <Screen>
+        <Stack.Screen options={{ headerShown: false, title: t('assign.title') }} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: sp(spacing.sm) }}>
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={12}
+            style={({ pressed }) => [
+              s.backBtn,
+              { width: touch, height: touch },
+              pressed && s.backBtnPressed,
+              pressed && { transform: [{ scale: 0.96 }] },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back')}
+          >
+            <T
+              style={{ fontSize: fs(24), lineHeight: fs(24), color: colors.inkSoft, fontFamily: fonts.uiMedium, marginTop: -2 }}
+              accessibilityElementsHidden
+              importantForAccessibility="no"
+            >
+              ‹
+            </T>
+          </Pressable>
+          <T variant="display" tx="assign.title" style={{ flex: 1 }} accessibilityRole="header" />
+        </View>
+        <Card style={{ gap: sp(spacing.md), alignItems: 'center', paddingVertical: sp(spacing.xl) }}>
+          <View style={[s.emptyIcon, { width: sp(64), height: sp(64), borderRadius: sp(32) }]}>
+            <T style={{ fontSize: fs(34) }} accessibilityElementsHidden importantForAccessibility="no">🌱</T>
+          </View>
+          <T variant="h2" style={{ textAlign: 'center' }}>
+            {lang === 'ne' ? 'अहिलेसम्म कुनै फार्म सेटअप भएको छैन' : 'No farm set up yet'}
+          </T>
+          <T variant="body" style={{ textAlign: 'center', color: colors.muted, maxWidth: 300, lineHeight: lh(15) }}>
+            {lang === 'ne'
+              ? 'तपाईंको खातामा अहिले कुनै क्षेत्र छैन। सेटअप पूरा भएपछि यहाँ बाली असाइन गर्न सकिन्छ।'
+              : 'Your account has no zone yet. Once setup is complete you can assign a crop here.'}
+          </T>
+        </Card>
+        <Button variant="ghost" tx="common.done" onPress={() => router.replace('/(customer)/dashboard' as never)} />
+      </Screen>
+    );
+  }
+
+  // ==========================================================================
+  // AT CAP — the farmer has used every sensor node they purchased.
+  // ==========================================================================
+  if (atCap) {
+    return (
+      <Screen>
+        <Stack.Screen options={{ headerShown: false, title: t('assign.title') }} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: sp(spacing.sm) }}>
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={12}
+            style={({ pressed }) => [s.backBtn, { width: touch, height: touch }, pressed && s.backBtnPressed]}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back')}
+          >
+            <T style={{ fontSize: fs(20), color: colors.muted }}>‹</T>
+          </Pressable>
+          <T variant="display" tx="assign.title" style={{ flex: 1 }} accessibilityRole="header" />
+        </View>
+        <Card style={{ gap: sp(spacing.md), alignItems: 'center', paddingVertical: sp(spacing.xl) }}>
+          <View style={[s.emptyIcon, { width: sp(64), height: sp(64), borderRadius: sp(32) }]}>
+            <T style={{ fontSize: fs(34) }} accessibilityElementsHidden importantForAccessibility="no">🔌</T>
+          </View>
+          <T variant="h2" tx="assign.atCapTitle" style={{ textAlign: 'center' }} />
+          <T variant="body" style={{ textAlign: 'center', color: colors.muted, maxWidth: 300, lineHeight: lh(15) }}>
+            {t('assign.atCapBody', { used: zoneCount, cap: zoneCap ?? 0 })}
+          </T>
+        </Card>
+        <Button variant="ghost" tx="common.done" onPress={() => router.replace('/(customer)/dashboard' as never)} />
+      </Screen>
+    );
+  }
+
+  // ==========================================================================
   // WIZARD
   // ==========================================================================
   return (
     <Screen scroll={step !== 0}>
       <Stack.Screen options={{ headerShown: false, title: t('assign.title') }} />
 
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={s.backBtn}>
-          <T style={{ fontSize: fs(18), color: colors.muted }}>‹</T>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: sp(spacing.sm) }}>
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={12}
+          style={({ pressed }) => [s.backBtn, { width: touch, height: touch }, pressed && s.backBtnPressed]}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back')}
+        >
+          <T style={{ fontSize: fs(20), color: colors.muted }}>‹</T>
         </Pressable>
-        <T variant="display" tx="assign.title" style={{ flex: 1 }} />
+        <T variant="display" tx="assign.title" style={{ flex: 1 }} accessibilityRole="header" />
       </View>
 
       <Stepper step={step} />
+      <T variant="h3" style={{ marginTop: sp(spacing.xs), color: colors.primaryInk }} accessibilityRole="header">
+        {`${lang === 'ne' ? `चरण ${step + 1}/3` : `Step ${step + 1} of 3`} · ${t(stepTitleKey[step])}`}
+      </T>
+      {isCreate && zoneCap !== null && (
+        <T variant="muted" style={{ marginTop: 2 }}>
+          {t('assign.quota', { used: zoneCount, cap: zoneCap })}
+        </T>
+      )}
 
       {/* ----- STEP 1 · pick a crop ----- */}
       {step === 0 && (
         <View style={{ flex: 1, gap: sp(spacing.sm) }}>
-          <T variant="h3" tx="assign.pickCrop" />
-          <CropPicker
-            crops={crops}
-            loading={cropsLoading}
-            selectedId={crop?.id ?? null}
-            onSelect={(c) => {
-              setCrop(c);
-              setZoneName((prev) => prev || (lang === 'ne' ? c.nameNe : c.nameEn));
-            }}
-          />
+          {cropsError ? (
+            <Card style={s.errorCard} accessibilityLiveRegion="polite">
+              <View style={s.errorRow}>
+                <T style={{ fontSize: fs(18) }} accessibilityElementsHidden importantForAccessibility="no">
+                  ⚠️
+                </T>
+                <T style={{ flex: 1, color: colors.criticalInk, fontFamily: fonts.uiMedium, lineHeight: lh(15) }}>
+                  {cropsError}
+                </T>
+              </View>
+              <Button variant="ghost" tx="common.retry" small onPress={() => void loadCrops()} />
+            </Card>
+          ) : (
+            <CropPicker
+              crops={crops}
+              loading={cropsLoading}
+              selectedId={crop?.id ?? null}
+              onSelect={(c) => {
+                setCrop(c);
+                setZoneName((prev) => prev || (lang === 'ne' ? c.nameNe : c.nameEn));
+              }}
+            />
+          )}
         </View>
       )}
 
@@ -376,17 +590,19 @@ export default function NewZone() {
       {step === 1 && crop && (
         <View style={{ gap: sp(spacing.md) }}>
           <Card style={{ gap: sp(spacing.sm) }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <T style={{ fontSize: fs(30) }}>{crop.emoji}</T>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: sp(spacing.md) }}>
+              <T style={{ fontSize: fs(30) }} accessibilityElementsHidden importantForAccessibility="no">
+                {crop.emoji}
+              </T>
               <View style={{ flex: 1 }}>
                 <T variant="h2">{lang === 'ne' ? crop.nameNe : crop.nameEn}</T>
                 {fit && (
-                  <T variant="muted">
+                  <T variant="muted" style={{ marginTop: 2, lineHeight: lh(12) }}>
                     {fit.emoji} {lang === 'ne' ? fit.ne : fit.en}
                   </T>
                 )}
               </View>
-              <Pill label={`${crop.daysToHarvest} ${t('common.days')}`} color={colors.primaryInk} />
+              <Pill label={`${crop.daysToHarvest} ${t('common.days')}`} color={colors.primaryInk} dot />
             </View>
           </Card>
 
@@ -397,18 +613,29 @@ export default function NewZone() {
               onChangeText={setZoneName}
               placeholder={t('assign.zoneName')}
               placeholderTextColor={colors.subtle}
-              style={[s.input, { fontSize: fs(15) }]}
+              style={[s.input, { fontSize: fs(15), minHeight: touch }]}
+              accessibilityLabel={t('assign.zoneName')}
             />
           </Card>
 
           <Card style={{ gap: sp(spacing.sm) }}>
             <CardTitle tx="assign.plantingDate" />
-            <View style={s.dateRow}>
-              <Pressable onPress={() => shiftDate(-1)} style={s.dateBtn}>
-                <T style={{ fontSize: fs(18), color: colors.primary }}>−</T>
+            <View style={[s.dateRow, { gap: sp(spacing.sm) }]}>
+              <Pressable
+                onPress={() => shiftDate(-1)}
+                style={({ pressed }) => [
+                  s.dateBtn,
+                  { width: touch, height: touch },
+                  pressed && s.dateBtnPressed,
+                  pressed && { transform: [{ scale: 0.94 }] },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={lang === 'ne' ? 'एक दिन घटाउनुहोस्' : 'One day earlier'}
+              >
+                <T style={{ fontSize: fs(22), color: colors.primary, fontFamily: fonts.uiSemibold }}>−</T>
               </Pressable>
-              <View style={{ flex: 1, alignItems: 'center' }}>
-                <T variant="mono" style={{ fontSize: fs(18), color: colors.ink }}>
+              <View style={{ flex: 1, alignItems: 'center', gap: 2 }} accessibilityRole="text">
+                <T variant="mono" style={{ fontSize: fs(18), color: colors.ink, letterSpacing: 0.5 }}>
                   {plantISO}
                 </T>
                 <T variant="muted">
@@ -420,27 +647,56 @@ export default function NewZone() {
                     : ''}
                 </T>
               </View>
-              <Pressable onPress={() => shiftDate(1)} style={s.dateBtn}>
-                <T style={{ fontSize: fs(18), color: colors.primary }}>+</T>
+              <Pressable
+                onPress={() => shiftDate(1)}
+                style={({ pressed }) => [
+                  s.dateBtn,
+                  { width: touch, height: touch },
+                  pressed && s.dateBtnPressed,
+                  pressed && { transform: [{ scale: 0.94 }] },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={lang === 'ne' ? 'एक दिन थप्नुहोस्' : 'One day later'}
+              >
+                <T style={{ fontSize: fs(22), color: colors.primary, fontFamily: fonts.uiSemibold }}>+</T>
               </Pressable>
             </View>
-            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            <View style={{ flexDirection: 'row', gap: sp(spacing.xs), flexWrap: 'wrap' }}>
               {[
                 { d: 0, en: 'Today', ne: 'आज' },
                 { d: -7, en: '1 wk ago', ne: '१ हप्ता' },
                 { d: -30, en: '1 mo ago', ne: '१ महिना' },
                 { d: -60, en: '2 mo ago', ne: '२ महिना' },
-              ].map((q) => (
-                <Pressable
-                  key={q.d}
-                  onPress={() => setPlantISO(toISODate(new Date(Date.now() + q.d * DAY_MS)))}
-                  style={s.quickChip}
-                >
-                  <T style={{ fontFamily: fonts.uiMedium, fontSize: fs(12), color: colors.muted }}>
-                    {lang === 'ne' ? q.ne : q.en}
-                  </T>
-                </Pressable>
-              ))}
+              ].map((q) => {
+                const qISO = toISODate(new Date(Date.now() + q.d * DAY_MS));
+                const active = qISO === plantISO;
+                const label = lang === 'ne' ? q.ne : q.en;
+                return (
+                  <Pressable
+                    key={q.d}
+                    onPress={() => setPlantISO(qISO)}
+                    style={({ pressed }) => [
+                      s.quickChip,
+                      { minHeight: Math.max(sp(36), touch - sp(8)) },
+                      active && s.quickChipActive,
+                      pressed && !active && { backgroundColor: colors.surface2 },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={label}
+                  >
+                    <T
+                      style={{
+                        fontFamily: active ? fonts.uiSemibold : fonts.uiMedium,
+                        fontSize: fs(12),
+                        color: active ? colors.primaryInk : colors.muted,
+                      }}
+                    >
+                      {label}
+                    </T>
+                  </Pressable>
+                );
+              })}
             </View>
             {summary && (
               <Pill
@@ -458,8 +714,10 @@ export default function NewZone() {
         <View style={{ gap: sp(spacing.md) }}>
           <Card style={{ gap: sp(spacing.sm) }}>
             <CardTitle tx="assign.bindNode" />
-            <View style={s.nodeRow}>
-              <T style={{ fontSize: fs(18) }}>📡</T>
+            <View style={[s.nodeRow, { gap: sp(spacing.sm) }]}>
+              <T style={{ fontSize: fs(18) }} accessibilityElementsHidden importantForAccessibility="no">
+                📡
+              </T>
               <TextInput
                 value={nodeSerial}
                 onChangeText={setNodeSerial}
@@ -467,45 +725,80 @@ export default function NewZone() {
                 placeholderTextColor={colors.subtle}
                 autoCapitalize="characters"
                 autoCorrect={false}
-                style={[s.input, { flex: 1, fontSize: fs(15), fontFamily: fonts.mono }]}
+                style={[s.input, { flex: 1, fontSize: fs(15), fontFamily: fonts.mono, minHeight: touch }]}
+                accessibilityLabel={t('assign.bindNode')}
               />
             </View>
-            <T variant="muted">
+            <T variant="muted" style={{ lineHeight: lh(12) }}>
               {lang === 'ne'
                 ? 'यो क्षेत्रको माटो प्रोब चलाउने ESP32 नोड।'
                 : 'The ESP32 node driving this zone’s soil probe.'}
             </T>
           </Card>
 
-          <Card style={{ gap: sp(spacing.sm) }}>
+          <Card style={{ gap: sp(spacing.xs) }}>
             <CardTitle tx="assign.channels" />
-            {CHANNEL_OPTIONS.map((c) => {
+            {CHANNEL_OPTIONS.map((c, i) => {
               const on = !!chOn[c.type];
               const band = summary?.band[c.engine];
               return (
-                <View key={c.type} style={s.chRow}>
-                  <View style={{ width: 26, alignItems: 'center' }}>
-                    <T style={{ fontSize: fs(15), color: colors.muted }}>{c.emoji}</T>
+                <React.Fragment key={c.type}>
+                  <View
+                    style={[s.chRow, { gap: sp(spacing.sm), minHeight: touch }]}
+                    accessible
+                    accessibilityRole="switch"
+                    accessibilityState={{ checked: on }}
+                    accessibilityLabel={t(CHANNEL_LABEL[c.type])}
+                  >
+                    <View style={{ width: sp(26), alignItems: 'center' }}>
+                      <T
+                        style={{
+                          fontSize: fs(15),
+                          fontFamily: fonts.uiSemibold,
+                          color: on ? colors.primaryInk : colors.subtle,
+                        }}
+                        accessibilityElementsHidden
+                        importantForAccessibility="no"
+                      >
+                        {c.emoji}
+                      </T>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <T variant="label" tx={CHANNEL_LABEL[c.type]} style={{ color: on ? colors.ink : colors.muted }} />
+                      {band && on && (
+                        <T variant="muted" style={{ color: colors.healthyInk, marginTop: 1 }}>
+                          {fmtRange(band, c.unit)}
+                        </T>
+                      )}
+                    </View>
+                    <Toggle value={on} onChange={(v) => setChOn((m) => ({ ...m, [c.type]: v }))} />
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <T variant="label" tx={CHANNEL_LABEL[c.type]} style={{ color: colors.ink }} />
-                    {band && on && <T variant="muted">{fmtRange(band, c.unit)}</T>}
-                  </View>
-                  <Toggle value={on} onChange={(v) => setChOn((m) => ({ ...m, [c.type]: v }))} />
-                </View>
+                  {i < CHANNEL_OPTIONS.length - 1 && <Divider />}
+                </React.Fragment>
               );
             })}
-            <T variant="muted" style={{ marginTop: 2 }}>
-              {enabledChannels.length} {t('assign.channels').toLowerCase()}
-            </T>
+            <Divider style={{ marginTop: sp(spacing.xs) }} />
+            <View style={[s.bandRow, { paddingTop: sp(spacing.xs) }]}>
+              <T variant="muted">{t('assign.channels').toLowerCase()}</T>
+              <T variant="mono" style={{ color: colors.primaryInk }}>
+                {enabledChannels.length} / {CHANNEL_OPTIONS.length}
+              </T>
+            </View>
           </Card>
         </View>
       )}
 
       {/* ----- footer nav ----- */}
       {error && (
-        <Card style={{ borderColor: colors.critical, backgroundColor: colors.criticalSoft }}>
-          <T style={{ color: colors.critical, fontFamily: fonts.uiMedium }}>{error}</T>
+        <Card style={s.errorCard} accessibilityLiveRegion="polite">
+          <View style={s.errorRow}>
+            <T style={{ fontSize: fs(18) }} accessibilityElementsHidden importantForAccessibility="no">
+              ⚠️
+            </T>
+            <T style={{ flex: 1, color: colors.criticalInk, fontFamily: fonts.uiMedium, lineHeight: lh(15) }}>
+              {error}
+            </T>
+          </View>
         </Card>
       )}
 
@@ -519,9 +812,15 @@ export default function NewZone() {
           {step < 2 ? (
             <Button tx="common.next" disabled={!canNext} onPress={() => canNext && setStep((step + 1) as Step)} />
           ) : submitting ? (
-            <View style={s.submittingBtn}>
-              <ActivityIndicator color="#fff" />
-              <T style={{ color: '#fff', fontFamily: fonts.uiSemibold, fontSize: fs(15) }}>{t('common.saving')}</T>
+            <View
+              style={[s.submittingBtn, { minHeight: touch }]}
+              accessibilityRole="progressbar"
+              accessibilityLabel={t('common.saving')}
+            >
+              <ActivityIndicator color={colors.onColor} />
+              <T style={{ color: colors.onColor, fontFamily: fonts.uiSemibold, fontSize: fs(15), letterSpacing: 0.2 }}>
+                {t('common.saving')}
+              </T>
             </View>
           ) : (
             <Button tx="assign.create" disabled={!crop} onPress={submit} />
@@ -543,6 +842,14 @@ const s = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
+  backBtnPressed: { backgroundColor: colors.bgWarm, borderColor: colors.muted },
+  emptyIcon: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primarySoft,
+  },
+  errorCard: { borderColor: colors.critical, backgroundColor: colors.criticalSoft, gap: spacing.sm },
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   // stepper
   stepper: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.xs },
   stepWrap: { flexDirection: 'row', alignItems: 'center', flex: 1 },
@@ -580,28 +887,39 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  dateBtnPressed: { opacity: 0.6, backgroundColor: colors.bgWarm },
   quickChip: {
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.pill,
     backgroundColor: colors.surface,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  quickChipActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   // node
   nodeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  // channels
+  // channels — rows are separated by <Divider/>, so no per-row border here.
   chRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     paddingVertical: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderSoft,
   },
   // success
   successHero: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.md },
+  successBadge: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    ...elevation.e1,
+  },
   bandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  noteRow: { flexDirection: 'row', alignItems: 'center' },
   submittingBtn: {
     flexDirection: 'row',
     gap: 8,

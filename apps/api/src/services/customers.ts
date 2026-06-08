@@ -26,7 +26,7 @@ import type {
   PublicUser,
   UUID,
 } from '@teranode/types';
-import { db, schema } from '../db/client';
+import { db, pool, schema } from '../db/client';
 import { HttpError } from '../middleware/error';
 import { sendWelcomeEmail } from '../lib/email';
 import {
@@ -536,4 +536,89 @@ export async function recordOta(
     .returning();
 
   return { gateway: toGateway(rows[0]), before: toGateway(before) };
+}
+
+/**
+ * DELETE /admin/customers/:id — permanently remove a customer account and ALL of
+ * its data (farms, zones, channels, telemetry, actuators, rules, devices, tokens,
+ * nodes, entitlements, owner users). Runs in one transaction in FK-dependency
+ * order (all relations are NO ACTION, so order matters). The admin root can never
+ * be deleted.
+ */
+export async function deleteCustomer(accountId: UUID): Promise<void> {
+  const rows = await db
+    .select({ type: schema.accounts.type })
+    .from(schema.accounts)
+    .where(eq(schema.accounts.id, accountId))
+    .limit(1);
+  const acc = rows[0];
+  if (!acc) throw new HttpError(404, 'customer not found');
+  if (acc.type === 'admin') throw new HttpError(400, 'the admin account cannot be deleted');
+
+  const farmsOf = `SELECT id FROM farms WHERE account_id = $1`;
+  const zonesOf = `SELECT z.id FROM zones z JOIN farms f ON z.farm_id = f.id WHERE f.account_id = $1`;
+  const gwsOf = `SELECT id FROM gateways WHERE account_id = $1`;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const A = [accountId];
+    await client.query(`DELETE FROM telemetry WHERE farm_id IN (${farmsOf})`, A);
+    await client.query(`DELETE FROM usage_events WHERE farm_id IN (${farmsOf})`, A);
+    await client.query(`DELETE FROM harvest_log WHERE zone_id IN (${zonesOf})`, A);
+    await client.query(`DELETE FROM alerts WHERE account_id = $1 OR farm_id IN (${farmsOf})`, A);
+    await client.query(`DELETE FROM rules WHERE zone_id IN (${zonesOf})`, A);
+    await client.query(`DELETE FROM actuators WHERE farm_id IN (${farmsOf}) OR zone_id IN (${zonesOf})`, A);
+    await client.query(`DELETE FROM sensor_channels WHERE farm_id IN (${farmsOf}) OR zone_id IN (${zonesOf})`, A);
+    await client.query(`DELETE FROM schedules WHERE farm_id IN (${farmsOf})`, A);
+    await client.query(`DELETE FROM dosing_profiles WHERE farm_id IN (${farmsOf})`, A);
+    await client.query(`DELETE FROM zones WHERE farm_id IN (${farmsOf})`, A);
+    await client.query(`DELETE FROM nodes WHERE gateway_id IN (${gwsOf})`, A);
+    await client.query(`DELETE FROM device_tokens WHERE gateway_id IN (${gwsOf})`, A);
+    await client.query(`DELETE FROM gateways WHERE account_id = $1`, A);
+    await client.query(`DELETE FROM farms WHERE account_id = $1`, A);
+    await client.query(`DELETE FROM entitlement_records WHERE account_id = $1`, A);
+    await client.query(`DELETE FROM audit_log WHERE actor_id IN (SELECT id FROM users WHERE account_id = $1)`, A);
+    await client.query(`DELETE FROM users WHERE account_id = $1`, A);
+    await client.query(`DELETE FROM accounts WHERE id = $1`, A);
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * DELETE /admin/gateways/:id — permanently remove a device (gateway) + its tokens
+ * + nodes. Any zones that referenced this device's nodes are detached (node_id
+ * nulled), NOT deleted — removing a brain must not destroy the farm's zones/data.
+ */
+export async function deleteGateway(gatewayId: UUID): Promise<void> {
+  const rows = await db
+    .select({ id: schema.gateways.id })
+    .from(schema.gateways)
+    .where(eq(schema.gateways.id, gatewayId))
+    .limit(1);
+  if (!rows[0]) throw new HttpError(404, 'device not found');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const G = [gatewayId];
+    await client.query(
+      `UPDATE zones SET node_id = NULL WHERE node_id IN (SELECT id FROM nodes WHERE gateway_id = $1)`,
+      G,
+    );
+    await client.query(`DELETE FROM nodes WHERE gateway_id = $1`, G);
+    await client.query(`DELETE FROM device_tokens WHERE gateway_id = $1`, G);
+    await client.query(`DELETE FROM gateways WHERE id = $1`, G);
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 }

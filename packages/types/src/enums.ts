@@ -33,7 +33,8 @@ export type ChannelType =
   | 'airtemp'
   | 'humidity'
   | 'pressure'
-  | 'rain';
+  | 'rain'
+  | 'flow'; // YF-S201 flow meter (L/min) — leak detection + usage metering
 
 /** alerts.severity */
 export type AlertSeverity = 'info' | 'warn' | 'critical';
@@ -81,6 +82,7 @@ export const CHANNEL_TYPES: readonly ChannelType[] = [
   'humidity',
   'pressure',
   'rain',
+  'flow',
 ];
 export const ALERT_SEVERITIES: readonly AlertSeverity[] = ['info', 'warn', 'critical'];
 export const ACTUATOR_SCOPES: readonly ActuatorScope[] = ['zone', 'farm'];

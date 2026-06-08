@@ -13,7 +13,7 @@
 // reconciliation worker only land in Phase 4. We do NOT import a not-yet-
 // existing mqtt module; we just update the row and report it back.
 
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import type {
   Actuator,
   ActuatorAction,
@@ -225,6 +225,63 @@ export async function commandActuator(
     .returning();
 
   const row = updated[0] ?? existing;
+  const actuator = toActuator(row);
+  return { actuator, pending: actuator.desired !== null && actuator.desired !== actuator.state };
+}
+
+/** GET /farms/:id/actuators — every actuator for a farm (pump/dosing + per-zone valves). */
+export async function listFarmActuators(
+  farmId: string,
+  scope: RequestScope,
+): Promise<Actuator[]> {
+  await farmInScope(farmId, scope);
+  const zoneRows = await db
+    .select({ id: schema.zones.id })
+    .from(schema.zones)
+    .where(eq(schema.zones.farmId, farmId));
+  const zoneIds = zoneRows.map((z) => z.id);
+  const farmActs = await db
+    .select()
+    .from(schema.actuators)
+    .where(eq(schema.actuators.farmId, farmId));
+  const zoneActs = zoneIds.length
+    ? await db.select().from(schema.actuators).where(inArray(schema.actuators.zoneId, zoneIds))
+    : [];
+  return [...farmActs, ...zoneActs].map(toActuator);
+}
+
+/**
+ * POST /zones/:id/valve — open/close a zone's valve by zone id. Resolves (or
+ * creates) the zone's valve actuator, then sets desired + reported state (manual
+ * override), mirroring commandActuator. Lets the mobile client control the valve
+ * without first knowing the actuator id.
+ */
+export async function commandZoneValve(
+  zoneId: string,
+  open: boolean,
+  scope: RequestScope,
+): Promise<CommandResult> {
+  await zoneInScope(zoneId, scope);
+  const rows = await db
+    .select()
+    .from(schema.actuators)
+    .where(and(eq(schema.actuators.zoneId, zoneId), eq(schema.actuators.type, 'valve')))
+    .limit(1);
+  let row = rows[0];
+  if (!row) {
+    const ins = await db
+      .insert(schema.actuators)
+      .values({ scope: 'zone', zoneId, type: 'valve', state: open, desired: open, mode: 'manual' })
+      .returning();
+    row = ins[0];
+  } else {
+    const upd = await db
+      .update(schema.actuators)
+      .set({ desired: open, state: open, mode: 'manual' })
+      .where(eq(schema.actuators.id, row.id))
+      .returning();
+    row = upd[0] ?? row;
+  }
   const actuator = toActuator(row);
   return { actuator, pending: actuator.desired !== null && actuator.desired !== actuator.state };
 }

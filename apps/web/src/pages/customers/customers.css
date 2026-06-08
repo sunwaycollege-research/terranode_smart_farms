@@ -26,10 +26,21 @@
   color: var(--ink);
   transition: border-color 0.14s ease, box-shadow 0.14s ease;
 }
+.cu-search input {
+  padding-right: 38px; /* room for the clear button */
+}
 .cu-search input:focus {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-soft);
+}
+/* Search field already paints its own focus ring; drop the global outline. */
+.cu-search input:focus-visible {
+  outline: none;
+}
+.cu-search input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
 }
 .cu-search__icon {
   position: absolute;
@@ -39,6 +50,29 @@
   color: var(--subtle);
   pointer-events: none;
   font-size: 14px;
+  line-height: 1;
+}
+.cu-search__clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.cu-search__clear:hover {
+  background: var(--surface-2);
+  color: var(--ink);
 }
 
 /* customer name cell */
@@ -60,6 +94,12 @@
   flex: none;
   text-transform: uppercase;
 }
+.cu-avatar--lg {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r3);
+  font-size: 18px;
+}
 .cu-name__meta {
   display: flex;
   flex-direction: column;
@@ -79,6 +119,27 @@
 }
 .cu-dim {
   color: var(--subtle);
+}
+
+/* loading skeleton — mirrors the customer table row + detail header avatar */
+.cu-skel-row td {
+  padding: 13px var(--sp-xl);
+  border-bottom: 1px solid var(--border-soft);
+  vertical-align: middle;
+}
+.cu-skel-row:last-child td {
+  border-bottom: none;
+}
+.cu-skel-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r2);
+  flex: none;
+}
+.cu-skel-avatar--lg {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r3);
 }
 
 /* --- detail layout ------------------------------------------------------ */
@@ -129,6 +190,11 @@
 }
 
 /* small summary tiles inside the detail card */
+.cu-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--sp-md);
+}
 .cu-mini {
   display: flex;
   flex-direction: column;
@@ -157,7 +223,13 @@
   padding: 10px var(--sp-md);
   border-radius: var(--r2);
   font-size: 13px;
+  line-height: 1.45;
   margin-bottom: var(--sp-lg);
+}
+.cu-notice__icon {
+  flex: none;
+  font-size: 15px;
+  line-height: 1;
 }
 .cu-notice--warn {
   background: var(--warn-soft);
@@ -198,15 +270,22 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-md);
+  min-height: 60px;
   padding: var(--sp-md) var(--sp-lg);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r2);
-  transition: border-color 0.14s ease;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+.cu-ent__item:hover {
+  border-color: var(--border-strong);
 }
 .cu-ent__item.is-on {
   border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
   background: color-mix(in srgb, var(--primary-soft) 45%, var(--surface));
+}
+.cu-ent__item.is-on:hover {
+  border-color: color-mix(in srgb, var(--primary) 60%, var(--border));
 }
 .cu-ent__meta {
   display: flex;
@@ -221,6 +300,7 @@
 .cu-ent__hint {
   font-size: 12px;
   color: var(--muted);
+  line-height: 1.35;
 }
 
 /* numeric stepper */
@@ -386,10 +466,14 @@
 }
 .cu-cred__value {
   flex: 1;
+  min-width: 0;
   font-family: var(--font-mono);
   font-size: 14px;
   color: var(--ink);
   word-break: break-all;
+}
+.cu-cred__row .tn-btn {
+  flex: none;
 }
 
 .cu-done__icon {
@@ -430,4 +514,33 @@
   place-items: center;
   padding: var(--sp-xxl);
   color: var(--muted);
+}
+
+/* --- responsive: tighten the wizard modal on small screens -------------- */
+@media (max-width: 560px) {
+  .cu-overlay {
+    padding: var(--sp-md);
+    align-items: start;
+  }
+  .cu-modal {
+    max-height: calc(100vh - 2 * var(--sp-md));
+  }
+  .cu-modal__head,
+  .cu-modal__foot {
+    padding-left: var(--sp-lg);
+    padding-right: var(--sp-lg);
+  }
+  .cu-modal__body {
+    padding: var(--sp-lg);
+  }
+  /* Collapse the step rail to compact numbered dots — labels would crowd. */
+  .cu-steps__item {
+    font-size: 0; /* hide trailing label text */
+  }
+  .cu-steps__num {
+    font-size: 12px; /* keep the number legible */
+  }
+  .cu-modal__foot {
+    flex-wrap: wrap;
+  }
 }

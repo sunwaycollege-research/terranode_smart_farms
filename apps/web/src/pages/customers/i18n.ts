@@ -10,7 +10,11 @@ const en = {
     count_one: '{{count}} customer',
     count_other: '{{count}} customers',
     empty: 'No customers yet. Create the first one.',
+    emptyTitle: 'No customers yet',
     noMatch: 'No customers match “{{q}}”.',
+    noMatchTitle: 'No matches',
+    errorTitle: 'Couldn’t load customers',
+    clearSearch: 'Clear search',
     col: {
       name: 'Customer',
       status: 'Status',
@@ -56,6 +60,17 @@ const en = {
     notFound: 'Customer not found.',
     loading: 'Loading customer…',
     error: 'Something went wrong.',
+    errorTitle: 'Couldn’t load customer',
+    enabledNote: 'Account enabled — its users can sign in now.',
+    disabledDone: 'Account disabled.',
+    dangerZone: 'Danger zone',
+    dangerLead:
+      'Permanently delete this customer and everything it owns. This cannot be undone.',
+    delete: 'Delete customer',
+    deleteConfirm:
+      'Permanently delete “{{name}}”?\n\nThis wipes the customer account and ALL of their farms, devices, and telemetry data. This action cannot be undone.',
+    deleting: 'Deleting…',
+    deleteError: 'Could not delete the customer.',
   },
   ent: {
     title: 'Device entitlements',
@@ -131,7 +146,11 @@ const ne = {
     count_one: '{{count}} ग्राहक',
     count_other: '{{count}} ग्राहक',
     empty: 'अहिलेसम्म कुनै ग्राहक छैन। पहिलो सिर्जना गर्नुहोस्।',
+    emptyTitle: 'अहिलेसम्म कुनै ग्राहक छैन',
     noMatch: '“{{q}}” सँग मिल्ने ग्राहक छैन।',
+    noMatchTitle: 'कुनै मिल्दो छैन',
+    errorTitle: 'ग्राहकहरू लोड गर्न सकिएन',
+    clearSearch: 'खोज हटाउनुहोस्',
     col: {
       name: 'ग्राहक',
       status: 'स्थिति',
@@ -177,6 +196,17 @@ const ne = {
     notFound: 'ग्राहक फेला परेन।',
     loading: 'ग्राहक लोड हुँदै…',
     error: 'केही गडबड भयो।',
+    errorTitle: 'ग्राहक लोड गर्न सकिएन',
+    enabledNote: 'खाता सक्षम भयो — अब प्रयोगकर्ताहरू साइन इन गर्न सक्छन्।',
+    disabledDone: 'खाता निष्क्रिय भयो।',
+    dangerZone: 'जोखिम क्षेत्र',
+    dangerLead:
+      'यो ग्राहक र यसका सबै कुरा स्थायी रूपमा मेटाउनुहोस्। यो पूर्ववत गर्न सकिँदैन।',
+    delete: 'ग्राहक मेटाउनुहोस्',
+    deleteConfirm:
+      '“{{name}}” लाई स्थायी रूपमा मेटाउने?\n\nयसले ग्राहक खाता र उनीहरूका सबै फार्म, उपकरण र टेलिमेट्री डेटा मेटाउँछ। यो कार्य पूर्ववत गर्न सकिँदैन।',
+    deleting: 'मेटाउँदै…',
+    deleteError: 'ग्राहक मेटाउन सकिएन।',
   },
   ent: {
     title: 'उपकरण अधिकार',

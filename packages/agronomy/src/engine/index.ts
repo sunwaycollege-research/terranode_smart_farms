@@ -10,3 +10,5 @@ export { recommendations } from './recommend';
 export { deriveRule } from './rules';
 export { analyzeZone } from './analyze';
 export type { AnalyzeZoneInput } from './analyze';
+export { fertilizerPlan, fertilizerSchedule } from './fertilizer';
+export type { FertilizerAdvice } from './fertilizer';

@@ -26,6 +26,7 @@ import type {
 } from '@teranode/types';
 import { api, ApiRequestError } from '../../api/client';
 import { Badge, Button, Card, PageHeader, Select, Stat } from '../../components';
+import './analytics.css';
 
 // palette pulled from CSS tokens so charts match the parchment + soil look.
 const C = {
@@ -112,34 +113,16 @@ function ChartTooltip({
 }) {
   if (!active || !payload || payload.length === 0) return null;
   return (
-    <div
-      style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--r2)',
-        boxShadow: 'var(--e2)',
-        padding: '8px 12px',
-        fontSize: 13,
-      }}
-    >
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>{label}</div>
+    <div className="an-tip">
+      <div className="an-tip__label">{label}</div>
       {payload.map((p, i) => (
-        <div
-          key={i}
-          className="mono"
-          style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-        >
-          <span
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: 2,
-              background: p.color,
-              flex: 'none',
-            }}
-          />
-          {p.name}: {typeof p.value === 'number' ? num(p.value, 1) : p.value}
-          {p.unit ? ` ${p.unit}` : ''}
+        <div key={i} className="an-tip__row">
+          <span className="an-tip__swatch" style={{ background: p.color }} />
+          <span>{p.name}</span>
+          <span className="an-tip__val">
+            {typeof p.value === 'number' ? num(p.value, 1) : p.value}
+            {p.unit ? ` ${p.unit}` : ''}
+          </span>
         </div>
       ))}
     </div>
@@ -263,9 +246,10 @@ export default function AnalyticsPage() {
         title={t('page.analytics.title')}
         subtitle={t('page.analytics.subtitle')}
         actions={
-          <div className="tn-row" style={{ gap: 'var(--sp-sm)' }}>
+          <div className="an-toolbar">
             <Select
-              aria-label="Farm"
+              className="an-toolbar__farm"
+              aria-label="Filter by farm"
               value={farmId}
               onChange={setFarmId}
               disabled={farmsLoading || farms.length === 0}
@@ -276,7 +260,8 @@ export default function AnalyticsPage() {
               }))}
             />
             <Select
-              aria-label="Window"
+              className="an-toolbar__window"
+              aria-label="Time window"
               value={days}
               onChange={setDays}
               options={WINDOWS}
@@ -287,6 +272,9 @@ export default function AnalyticsPage() {
               onClick={handleExport}
               loading={exporting}
               disabled={!farmId || !hasData}
+              title={
+                !hasData ? 'No data to export for this farm and window' : undefined
+              }
             >
               Export CSV
             </Button>
@@ -296,20 +284,42 @@ export default function AnalyticsPage() {
 
       {farmsError ? (
         <Card>
-          <div style={{ textAlign: 'center', padding: 'var(--sp-lg)' }}>
-            <p style={{ color: 'var(--critical)', marginBottom: 12 }}>{farmsError}</p>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => window.location.reload()}
-            >
-              {t('common.retry')}
-            </Button>
+          <div className="tn-state tn-state--error" role="alert">
+            <span className="tn-state__icon" aria-hidden="true">
+              ⚠
+            </span>
+            <span className="tn-state__title">{t('common.error')}</span>
+            <p className="tn-state__body">{farmsError}</p>
+            <div className="tn-state__actions">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => window.location.reload()}
+              >
+                {t('common.retry')}
+              </Button>
+            </div>
           </div>
         </Card>
-      ) : farms.length === 0 && !farmsLoading ? (
+      ) : farmsLoading ? (
         <Card>
-          <p className="tn-muted">No farms are bound to a gateway yet.</p>
+          <div className="tn-state" role="status" aria-live="polite">
+            <span className="tn-spinner tn-spinner--lg" aria-hidden="true" />
+            <span className="tn-state__title">{t('common.loading')}</span>
+          </div>
+        </Card>
+      ) : farms.length === 0 ? (
+        <Card>
+          <div className="tn-state">
+            <span className="tn-state__icon" aria-hidden="true">
+              🌾
+            </span>
+            <span className="tn-state__title">No farms yet</span>
+            <p className="tn-state__body">
+              No farms are bound to a gateway yet. Once a customer claims a
+              gateway and binds a farm, usage and savings will appear here.
+            </p>
+          </div>
         </Card>
       ) : (
         <div className="tn-stack">
@@ -342,13 +352,17 @@ export default function AnalyticsPage() {
 
           {dataError && (
             <Card>
-              <div style={{ textAlign: 'center', padding: 'var(--sp-md)' }}>
-                <p style={{ color: 'var(--critical)', marginBottom: 12 }}>
-                  {dataError}
-                </p>
-                <Button variant="secondary" size="sm" onClick={loadData}>
-                  {t('common.retry')}
-                </Button>
+              <div className="tn-state tn-state--error" role="alert">
+                <span className="tn-state__icon" aria-hidden="true">
+                  ⚠
+                </span>
+                <span className="tn-state__title">{t('common.error')}</span>
+                <p className="tn-state__body">{dataError}</p>
+                <div className="tn-state__actions">
+                  <Button variant="secondary" size="sm" onClick={loadData}>
+                    {t('common.retry')}
+                  </Button>
+                </div>
               </div>
             </Card>
           )}
@@ -362,8 +376,8 @@ export default function AnalyticsPage() {
               </Badge>
             }
           >
-            <ChartFrame loading={dataLoading} empty={!hasData} t={t}>
-              <ResponsiveContainer width="100%" height={300}>
+            <ChartFrame loading={dataLoading} empty={!hasData} t={t} size="tall">
+              <ResponsiveContainer width="100%" height="100%">
                 <AreaChart
                   data={points}
                   margin={{ top: 8, right: 12, bottom: 0, left: 0 }}
@@ -414,8 +428,8 @@ export default function AnalyticsPage() {
               </Badge>
             }
           >
-            <ChartFrame loading={dataLoading} empty={!hasData} t={t}>
-              <ResponsiveContainer width="100%" height={280}>
+            <ChartFrame loading={dataLoading} empty={!hasData} t={t} size="short">
+              <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={points}
                   margin={{ top: 8, right: 12, bottom: 0, left: 0 }}
@@ -466,17 +480,19 @@ function SavingsCard({
   const pct = savings?.savedPct ?? 0;
   const tone = pct >= 40 ? C.healthy : pct >= 15 ? C.water : C.dose;
   return (
-    <div
-      className="tn-stat"
-      style={{
-        background:
-          'linear-gradient(135deg, var(--healthy-soft), var(--surface) 70%)',
-        borderColor: 'var(--healthy)',
-      }}
-    >
+    <div className="tn-stat an-savings">
       <span className="tn-stat__label">Water saved vs baseline</span>
-      <span className="tn-stat__value" style={{ color: tone }}>
-        {loading ? '…' : savings ? `${num(pct, 1)}` : '—'}
+      <span
+        className="tn-stat__value"
+        style={{ color: loading || !savings ? undefined : tone }}
+      >
+        {loading ? (
+          <span className="tn-spinner" aria-hidden="true" />
+        ) : savings ? (
+          `${num(pct, 1)}`
+        ) : (
+          '—'
+        )}
         <span className="tn-stat__unit"> %</span>
       </span>
       <span className="tn-stat__hint">
@@ -496,40 +512,37 @@ function ChartFrame({
   loading,
   empty,
   t,
+  size = 'short',
   children,
 }: {
   loading: boolean;
   empty: boolean;
   t: (k: string) => string;
+  size?: 'tall' | 'short';
   children: React.ReactNode;
 }) {
+  const frameClass = `an-chart an-chart--${size}`;
   if (loading) {
     return (
-      <div
-        style={{
-          height: 280,
-          display: 'grid',
-          placeItems: 'center',
-          color: 'var(--muted)',
-        }}
-      >
-        {t('common.loading')}
+      <div className={frameClass}>
+        <div className="an-chart__state" role="status" aria-live="polite">
+          <span className="tn-spinner tn-spinner--lg" aria-hidden="true" />
+          <span>{t('common.loading')}</span>
+        </div>
       </div>
     );
   }
   if (empty) {
     return (
-      <div
-        style={{
-          height: 280,
-          display: 'grid',
-          placeItems: 'center',
-          color: 'var(--muted)',
-        }}
-      >
-        {t('common.empty')}
+      <div className={frameClass}>
+        <div className="an-chart__state">
+          <span className="tn-state__icon" aria-hidden="true">
+            📊
+          </span>
+          <span>{t('common.empty')}</span>
+        </div>
       </div>
     );
   }
-  return <>{children}</>;
+  return <div className={frameClass}>{children}</div>;
 }

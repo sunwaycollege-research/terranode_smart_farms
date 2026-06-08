@@ -155,13 +155,20 @@ export function CreateCustomerWizard({
   // --- one-time credential reveal -------------------------------------------
   if (created) {
     return (
-      <div className="cu-overlay" role="dialog" aria-modal="true">
+      <div
+        className="cu-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cu-done-title"
+      >
         <div className="cu-modal">
           <div className="cu-modal__body" style={{ textAlign: 'center' }}>
             <div className="cu-done__icon" aria-hidden>
               ✓
             </div>
-            <div className="cu-modal__title">{t('wizard.done.title')}</div>
+            <div className="cu-modal__title" id="cu-done-title">
+              {t('wizard.done.title')}
+            </div>
             <p className="cu-modal__sub" style={{ marginBottom: 'var(--sp-xl)' }}>
               {t('wizard.done.lead')}
             </p>
@@ -222,13 +229,16 @@ export function CreateCustomerWizard({
       className="cu-overlay"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="cu-wizard-title"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div className="cu-modal">
         <div className="cu-modal__head">
-          <div className="cu-modal__title">{t('wizard.title')}</div>
+          <div className="cu-modal__title" id="cu-wizard-title">
+            {t('wizard.title')}
+          </div>
           <div className="cu-modal__sub">{t('wizard.subtitle')}</div>
           <div className="cu-steps">
             {STEP_KEYS.map((key, i) => (
@@ -242,8 +252,11 @@ export function CreateCustomerWizard({
                   ]
                     .filter(Boolean)
                     .join(' ')}
+                  aria-current={i === step ? 'step' : undefined}
                 >
-                  <span className="cu-steps__num">{i < step ? '✓' : i + 1}</span>
+                  <span className="cu-steps__num" aria-hidden>
+                    {i < step ? '✓' : i + 1}
+                  </span>
                   {t(`wizard.steps.${key}`)}
                 </span>
               </span>

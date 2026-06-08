@@ -1,20 +1,19 @@
 // TERANODE — Zone detail (inspector + valve control + coach).
 //
-// Driven entirely by the api.* seam (cutover-safe):
-//   • api.zones(farmId) / api.zone(id) → the ZoneWithCrop (name, crop, mode)
-//   • api.zoneAnalysis(id, lang)       → stage, per-channel status + idealRange,
-//                                        readings, recommendations (localized)
-//   • api.actuators()                  → the zone's valve (reported + desired)
-//   • api.setZoneMode / api.setValve   → control, with desired-vs-reported pending
+// Driven entirely by the api.* seam (cutover-safe), scoped to the signed-in
+// customer by the server (api.zone / api.zoneAnalysis / api.rules all 404 / scope
+// to the caller's account — no other customer's data is ever reachable):
+//   • api.zone(id)               → the ZoneWithCrop (name, crop, mode, farmId)
+//   • api.zoneAnalysis(id, lang)  → stage, per-channel status + idealRange,
+//                                   readings, recommendations (localized)
+//   • api.rules(id)               → the active moisture target band (Rule)
+//   • api.actuators(farmId)       → the zone's valve (reported + desired)
+//   • api.setZoneMode / api.setValve → control, with desired-vs-reported pending
 //
-// Layout:
-//   • GaugeRing for moisture (tinted against the crop's stage band)
-//   • BarMeters for pH / EC / N / P / K with stage-aware target ticks + the
-//     acceptable band shaded (taken from analysis.channels[].idealRange)
-//   • per-channel below / in / above colored pills
-//   • a valve Auto/Manual segmented control + open/close that shows the device's
-//     reported state, not just the request
-//   • a Coach card with the top recommendation (en/ne via useT)
+// States: a real fetch can be slow, fail, or return nothing for a brand-new
+// account, so this screen shows distinct LOADING (spinner), ERROR (+ Retry) and
+// NOT-FOUND screens before it ever renders an inspector. NOTHING here is a
+// hardcoded sample — every reading/serial/target comes from api.* or shows "—".
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
@@ -25,16 +24,20 @@ import type {
   Channel,
   ChannelStatus,
   Recommendation,
+  Rule,
   ZoneAnalysisResponse,
   ZoneWithCrop,
 } from '@teranode/types';
-import { Button, Card, CardTitle, Pill, Screen, Segmented, T } from '../../../src/components/ui';
+import { Button, Card, CardTitle, Divider, EmptyState, Loading, Pill, Screen, Segmented, T } from '../../../src/components/ui';
 import { GaugeRing } from '../../../src/components/GaugeRing';
 import { BarMeter } from '../../../src/components/BarMeter';
 import { StageBadge } from '../../../src/components/FieldTiles';
+import { NutrientCard } from '../../../src/components/NutrientCard';
+import { FertilizerCard } from '../../../src/components/FertilizerCard';
 import { api } from '../../../src/api/client';
 import { useT, type TranslationKey } from '../../../src/i18n';
-import { colors, fonts, spacing } from '../../../src/theme/tokens';
+import { useScale } from '../../../src/theme/scale';
+import { colors, spacing } from '../../../src/theme/tokens';
 
 /* ---------- channel presentation metadata ---------- */
 const CHANNEL_LABEL: Partial<Record<Channel, TranslationKey>> = {
@@ -81,6 +84,20 @@ function statusColor(status: BandStatus): string {
   return colors.muted;
 }
 
+/* Coach severity → localized label + signal colour (act=red, watch=amber,
+ * info=blue) so the recommendation chip reads in Nepali and carries the same
+ * icon+colour signal used across the app. */
+const SEVERITY_KEY: Record<Recommendation['severity'], TranslationKey> = {
+  critical: 'alerts.critical',
+  warn: 'alerts.warn',
+  info: 'alerts.info',
+};
+function severityColor(sev: Recommendation['severity']): string {
+  if (sev === 'critical') return colors.critical;
+  if (sev === 'warn') return colors.warn;
+  return colors.watering;
+}
+
 /** Format a channel value for display (decimals where meaningful). */
 function fmt(channel: Channel, v: number | null): string {
   if (v == null) return '—';
@@ -107,41 +124,91 @@ function axisFor(c: ChannelStatus): { pct: number; tickPct: number; bandPct: [nu
   };
 }
 
+/** A header that works on every state screen (back button + zone title). */
+function DetailHeader({ title }: { title: string }) {
+  const { fs, sp } = useScale();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: sp(spacing.md) }}>
+      <Button variant="ghost" small tx="common.back" onPress={() => router.back()} />
+      <T
+        variant="display"
+        numberOfLines={1}
+        accessibilityRole="header"
+        style={{ fontSize: fs(24), flex: 1 }}
+      >
+        {title}
+      </T>
+    </View>
+  );
+}
+
+type Phase = 'loading' | 'ready' | 'error' | 'notfound' | 'needsCrop';
+
 export default function ZoneDetail() {
   const { zoneId } = useLocalSearchParams<{ zoneId: string }>();
   const id = String(zoneId);
   const { t, lang } = useT();
+  const { fs, sp, lh } = useScale();
 
+  const [phase, setPhase] = useState<Phase>('loading');
   const [zone, setZone] = useState<ZoneWithCrop | null>(null);
   const [analysis, setAnalysis] = useState<ZoneAnalysisResponse | null>(null);
+  const [rule, setRule] = useState<Rule | null>(null);
   const [valve, setValve] = useState<Actuator | null>(null);
   const [pending, setPending] = useState(false);
   const busy = useRef(false);
 
-  const pull = useCallback(async (): Promise<void> => {
-    try {
-      const farms = await api.farms();
-      let z: ZoneWithCrop | undefined;
-      for (const f of farms) {
-        const zs = await api.zones(f.id);
-        z = zs.find((x) => x.id === id);
-        if (z) break;
+  // `pull` re-fetches live state. `initial` distinguishes the very first load
+  // (which drives the loading/error/not-found phase) from the silent 2s refresh
+  // (which keeps the last-good UI on a transient failure).
+  const pull = useCallback(
+    async (initial = false): Promise<void> => {
+      if (initial) setPhase('loading');
+      try {
+        // The zone itself is the source of truth for farmId + crop + mode; the
+        // server scopes it to the signed-in account and 404s anything else.
+        const z = await api.zone(id);
+        setZone(z);
+        // A freshly-created zone has no crop yet → analysis returns 409. That's
+        // not an error: invite the farmer to assign a crop (don't block the zone).
+        let a: ZoneAnalysisResponse;
+        try {
+          a = await api.zoneAnalysis(id, lang);
+        } catch (ae) {
+          const m = ae instanceof Error ? ae.message : '';
+          if (/\b409\b/.test(m) || /no crop/i.test(m)) {
+            if (initial) setPhase('needsCrop');
+            return;
+          }
+          throw ae;
+        }
+        const [r, acts] = await Promise.all([
+          api.rules(id).catch(() => null),
+          api.actuators(z.farmId).catch(() => [] as Actuator[]),
+        ]);
+        const v = acts.find((x) => x.type === 'valve' && x.zoneId === id) ?? null;
+        setAnalysis(a);
+        setRule(r);
+        setValve(v);
+        // clear the optimistic pending flag once the device confirms.
+        if (v && v.desired == null) setPending(false);
+        setPhase('ready');
+      } catch (e) {
+        if (initial) {
+          // A 404 means this zone doesn't exist / isn't ours → not-found, not an
+          // error the user can retry away.
+          const msg = e instanceof Error ? e.message : '';
+          setPhase(/\b404\b/.test(msg) ? 'notfound' : 'error');
+        }
+        // non-initial: keep last good state; the interval will retry.
       }
-      const [a, acts] = await Promise.all([api.zoneAnalysis(id, lang), api.actuators().catch(() => [] as Actuator[])]);
-      const v = acts.find((x) => x.type === 'valve' && x.zoneId === id) ?? null;
-      if (z) setZone(z);
-      setAnalysis(a);
-      setValve(v);
-      // clear the optimistic pending flag once the device confirms (desired cleared).
-      if (v && v.desired == null) setPending(false);
-    } catch {
-      /* keep last good state; the interval will retry */
-    }
-  }, [id, lang]);
+    },
+    [id, lang]
+  );
 
   useEffect(() => {
-    void pull();
-    const t2 = setInterval(() => void pull(), 2000);
+    void pull(true);
+    const t2 = setInterval(() => void pull(false), 2000);
     return () => clearInterval(t2);
   }, [pull]);
 
@@ -152,39 +219,104 @@ export default function ZoneDetail() {
       try {
         await api.setZoneMode(id, mode);
       } finally {
-        await pull();
+        await pull(false);
       }
     },
     [id, zone, pull]
   );
 
   const toggleValve = useCallback(async () => {
-    if (busy.current) return;
+    if (busy.current || !valve) return;
     busy.current = true;
     setPending(true);
-    const open = !(valve?.state ?? false);
+    const open = !valve.state;
     // optimistic desired state while the device confirms.
-    if (valve) setValve({ ...valve, desired: open });
+    setValve({ ...valve, desired: open });
     try {
       const res = await api.setValve(id, open);
       setValve(res.actuator);
+      if (!res.pending) setPending(false);
     } finally {
       busy.current = false;
-      setTimeout(() => void pull(), 800);
+      setTimeout(() => void pull(false), 800);
     }
   }, [id, valve, pull]);
 
-  if (!analysis) {
+  /* ---------- LOADING ---------- */
+  if (phase === 'loading') {
     return (
       <Screen>
         <Stack.Screen options={{ headerShown: false }} />
-        <T tx="common.loading" />
+        <DetailHeader title={t('common.loading')} />
+        {/* shared, centred spinner + caption so the load state matches every screen */}
+        <Card>
+          <Loading />
+        </Card>
       </Screen>
     );
   }
 
-  const crop = zone?.crop;
-  const cropLabel = crop ? (lang === 'ne' ? crop.nameNe : crop.nameEn) : '';
+  /* ---------- NOT FOUND ---------- */
+  if (phase === 'notfound') {
+    return (
+      <Screen>
+        <Stack.Screen options={{ headerShown: false }} />
+        <DetailHeader title="—" />
+        <Card style={{ gap: sp(spacing.md) }}>
+          <EmptyState icon="🔍" tx="zone.notFound" />
+          <Button tx="common.back" variant="ghost" onPress={() => router.back()} />
+        </Card>
+      </Screen>
+    );
+  }
+
+  /* ---------- NEEDS CROP (zone created, no crop assigned yet) ---------- */
+  if (phase === 'needsCrop') {
+    return (
+      <Screen>
+        <Stack.Screen options={{ headerShown: false }} />
+        <DetailHeader title={zone?.name ?? t('common.loading')} />
+        <Card style={{ gap: sp(spacing.md), alignItems: 'center', paddingVertical: sp(spacing.xl) }}>
+          <T style={{ fontSize: fs(36) }} importantForAccessibility="no">
+            🌱
+          </T>
+          <T variant="h3" tx="zone.needsCropTitle" style={{ textAlign: 'center' }} />
+          <T
+            variant="body"
+            tx="zone.needsCropBody"
+            style={{ textAlign: 'center', color: colors.muted, maxWidth: 300, lineHeight: lh(20) }}
+          />
+          <Button tx="zone.assignCrop" onPress={() => router.push(`/(customer)/zones/new?zoneId=${id}`)} />
+          <Button tx="common.back" variant="ghost" onPress={() => router.back()} />
+        </Card>
+      </Screen>
+    );
+  }
+
+  /* ---------- ERROR ---------- */
+  if (phase === 'error' || !analysis || !zone) {
+    return (
+      <Screen>
+        <Stack.Screen options={{ headerShown: false }} />
+        <DetailHeader title="—" />
+        <Card
+          style={{ gap: sp(spacing.md), alignItems: 'center', paddingVertical: sp(spacing.xl) }}
+          accessible
+          accessibilityRole="alert"
+        >
+          <T style={{ fontSize: fs(32) }} accessibilityElementsHidden importantForAccessibility="no">
+            ⚠️
+          </T>
+          <T variant="body" tx="zone.loadError" style={{ textAlign: 'center', color: colors.muted, maxWidth: 280 }} />
+          <Button tx="common.retry" onPress={() => void pull(true)} />
+        </Card>
+      </Screen>
+    );
+  }
+
+  /* ---------- READY ---------- */
+  const crop = zone.crop;
+  const cropLabel = crop ? (lang === 'ne' ? crop.nameNe : crop.nameEn) : '—';
   const emoji = crop?.emoji ?? '🌱';
   const totalDays = crop?.daysToHarvest ?? 0;
 
@@ -202,38 +334,46 @@ export default function ZoneDetail() {
   // the pills row covers every evaluated channel.
   const pills = analysis.channels.filter((c) => c.status !== 'unknown');
 
-  const mode = (zone?.mode ?? 'auto') as 'auto' | 'manual';
+  const mode = (zone.mode ?? 'auto') as 'auto' | 'manual';
   const reportedOpen = valve?.state ?? false;
   const desired = valve?.desired;
   const showPending = pending || (desired != null && desired !== reportedOpen);
 
+  // target band comes from the live rule, falling back to the analysis echo.
+  const targetLow = rule?.moistureLow ?? analysis.rule.moistureLow;
+  const targetHigh = rule?.moistureHigh ?? analysis.rule.moistureHigh;
+
   const topRec: Recommendation | undefined = analysis.recommendations[0];
+  const soilTemp = analysis.readings.soilTemp ?? null;
 
   return (
     <Screen>
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* header */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <Button variant="ghost" small tx="common.back" onPress={() => router.back()} />
-        <T variant="display" style={{ fontSize: 26, flex: 1 }}>
-          {emoji} {zone?.name ?? ''}
-        </T>
-      </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <DetailHeader title={`${emoji} ${zone.name}`} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: sp(spacing.sm), flexWrap: 'wrap' }}>
         <T variant="muted">{cropLabel}</T>
         <StageBadge stage={analysis.stage} />
         {totalDays > 0 && (
           <Pill label={t('zone.dayOf', { day: analysis.daysSincePlanting, total: totalDays })} color={colors.muted} />
         )}
-        <Pill label={`${t('field.health')} ${analysis.health.score}`} dot color={
-          analysis.health.score >= 80 ? colors.healthy : analysis.health.score >= 50 ? colors.dry : colors.critical
-        } />
+        <Pill
+          label={`${t('field.health')} ${analysis.health.score}`}
+          dot
+          color={
+            analysis.health.score >= 80
+              ? colors.healthy
+              : analysis.health.score >= 50
+                ? colors.warn
+                : colors.critical
+          }
+        />
       </View>
 
       {/* gauge + bars */}
       <Card>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.lg }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: sp(spacing.lg) }}>
           <GaugeRing value={moistureVal} color={moistureColor} label={t('zone.moisture')} />
           <View style={{ flex: 1 }}>
             {bars.map((c) => {
@@ -252,91 +392,123 @@ export default function ZoneDetail() {
             })}
           </View>
         </View>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm }}>
-          <T variant="muted">
-            🌡️ {t('zone.soilTemp')} {fmt('soilTemp', analysis.readings.soilTemp ?? null)}°C
+        <Divider style={{ marginTop: sp(spacing.md), marginBottom: sp(spacing.sm) }} />
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: sp(spacing.sm) }}>
+          <T variant="muted" accessibilityLabel={`${t('zone.soilTemp')} ${fmt('soilTemp', soilTemp)}${soilTemp != null ? '°C' : ''}`}>
+            🌡️ {t('zone.soilTemp')} {fmt('soilTemp', soilTemp)}{soilTemp != null ? '°C' : ''}
           </T>
-          <T variant="muted">
-            {t('zone.target')}: {analysis.rule.moistureLow}–{analysis.rule.moistureHigh}%
+          <T variant="muted" accessibilityLabel={`${t('zone.moisture')} ${t('zone.target')} ${targetLow} ${targetHigh} percent`}>
+            {t('zone.target')}: {targetLow}–{targetHigh}%
           </T>
         </View>
       </Card>
 
-      {/* per-channel status pills */}
+      {/* per-channel status pills — green=in range / amber=below / blue=above */}
       <Card>
-        <CardTitle>{t('zone.target')}</CardTitle>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-          {pills.map((c) => (
-            <View key={c.channel} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <CardTitle>{t('zone.status')}</CardTitle>
+        {pills.length ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: sp(spacing.sm) }}>
+            {pills.map((c) => (
               <Pill
+                key={c.channel}
                 label={`${CHANNEL_SHORT[c.channel]} ${t(STATUS_KEY[c.status])}`}
                 dot
                 color={statusColor(c.status)}
               />
-            </View>
-          ))}
-        </View>
+            ))}
+          </View>
+        ) : (
+          <EmptyState icon="📡" tx="alerts.none" />
+        )}
       </Card>
 
-      {/* coach card */}
-      <Card style={{ gap: spacing.sm, borderColor: topRec ? colors.primary : colors.border }}>
+      {/* soil nutrients (N/P/K + pH/EC, plain LOW/OK/HIGH guidance) */}
+      <NutrientCard readings={analysis.readings} />
+
+      {/* stage-aware fertilizer plan (research-backed dose + organic option) */}
+      <FertilizerCard cropId={crop?.id ?? null} stage={analysis.stage} />
+
+      {/* coach card — left accent + severity/channel chips + one plain sentence.
+          A live recommendation gets a coloured rail matching its severity so the
+          single most-important action stands out at a glance. */}
+      <Card
+        style={{
+          gap: sp(spacing.sm),
+          borderColor: topRec ? severityColor(topRec.severity) : colors.border,
+          borderLeftWidth: 4,
+          borderLeftColor: topRec ? severityColor(topRec.severity) : colors.border,
+        }}
+      >
         <CardTitle tx="zone.coach" />
         {topRec ? (
-          <View style={{ gap: spacing.xs }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Pill
-                label={topRec.severity.toUpperCase()}
-                dot
-                color={
-                  topRec.severity === 'critical' ? colors.critical : topRec.severity === 'warn' ? colors.warn : colors.watering
-                }
-              />
+          <View style={{ gap: sp(spacing.sm) }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: sp(spacing.sm), flexWrap: 'wrap' }}>
+              <Pill label={t(SEVERITY_KEY[topRec.severity])} dot color={severityColor(topRec.severity)} />
               <Pill label={CHANNEL_SHORT[topRec.channel]} color={colors.muted} />
             </View>
-            <T style={{ fontFamily: fonts.ui, color: colors.inkSoft, lineHeight: 21 }}>
+            <T variant="body" style={{ color: colors.ink }}>
               {lang === 'ne' ? topRec.messageNe : topRec.messageEn}
             </T>
           </View>
         ) : (
-          <T variant="muted">{t('alerts.none')}</T>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: sp(spacing.sm) }}>
+            <Pill label={t('field.health')} dot color={colors.healthy} />
+            <T variant="muted" tx="alerts.none" style={{ flex: 1 }} />
+          </View>
         )}
       </Card>
 
-      {/* valve control */}
-      <Card style={{ gap: spacing.md }}>
+      {/* valve control — Auto/Manual mode + the live OPEN/SHUT action. The pill
+          always voices the device's *reported* state (or Pending) so the farmer
+          sees what the gateway is actually doing, not just their request. */}
+      <Card style={{ gap: sp(spacing.md) }}>
         <CardTitle tx="zone.valve" />
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-          <View style={{ flex: 1 }}>
-            <T variant="label" style={{ marginBottom: 6 }} tx="zone.mode" />
-            <Segmented
-              options={['auto', 'manual']}
-              value={mode}
-              onChange={(m) => void setMode(m)}
-              labels={{ auto: t('common.auto'), manual: t('common.manual') }}
-            />
-          </View>
-        </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Button
-            tx={reportedOpen ? 'common.close' : 'common.open'}
-            variant={reportedOpen ? 'danger' : 'primary'}
-            disabled={mode !== 'manual' || showPending}
-            onPress={() => void toggleValve()}
-          />
-          {showPending ? (
-            <Pill label={t('zone.pending')} color={colors.warn} dot />
-          ) : (
-            <Pill
-              label={reportedOpen ? `${t('zone.valve')}: ${t('common.open').toUpperCase()}` : `${t('zone.valve')}: ${t('common.off')}`}
-              color={reportedOpen ? colors.primary : colors.muted}
-              dot
-            />
-          )}
-        </View>
-        <T variant="muted">
-          The gateway runs the control loop locally. Switch to Manual to override — the app shows the device's reported
-          state, not just your request.
-        </T>
+        {valve ? (
+          <>
+            <View style={{ gap: sp(spacing.xs) }}>
+              <T variant="label" tx="zone.mode" />
+              <Segmented
+                options={['auto', 'manual']}
+                value={mode}
+                onChange={(m) => void setMode(m)}
+                labels={{ auto: t('common.auto'), manual: t('common.manual') }}
+              />
+            </View>
+            <Divider />
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: sp(spacing.sm),
+                flexWrap: 'wrap',
+              }}
+            >
+              <Button
+                tx={reportedOpen ? 'common.close' : 'common.open'}
+                variant={reportedOpen ? 'danger' : 'primary'}
+                disabled={mode !== 'manual' || showPending}
+                onPress={() => void toggleValve()}
+              />
+              {showPending ? (
+                <Pill label={t('zone.pending')} color={colors.warn} dot />
+              ) : (
+                <Pill
+                  label={
+                    reportedOpen
+                      ? `${t('zone.valve')}: ${t('common.open').toUpperCase()}`
+                      : `${t('zone.valve')}: ${t('common.off')}`
+                  }
+                  color={reportedOpen ? colors.primary : colors.muted}
+                  dot
+                />
+              )}
+            </View>
+            <T variant="muted" tx="zone.valveHint" style={{ lineHeight: lh(12) }} />
+          </>
+        ) : (
+          <EmptyState icon="🚰" tx="zone.noValve" />
+        )}
       </Card>
     </Screen>
   );

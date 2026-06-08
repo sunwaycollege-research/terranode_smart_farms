@@ -21,12 +21,17 @@ import type {
   AssignZoneResponse,
   CreateHarvestRequest,
   CreateHarvestResponse,
+  CreateZoneRequest,
+  CreateZoneResponse,
   CropRef,
   CropWithStages,
   DeviceCatalogItem,
   DeviceCatalogResponse,
   EntitlementsResponse,
   Farm,
+  FarmReading,
+  FarmReadingsResponse,
+  Gateway,
   HarvestLog,
   HarvestResponse,
   ListCropsResponse,
@@ -47,22 +52,105 @@ import type {
 import { getCrop } from '@teranode/agronomy';
 
 const extra = (Constants.expoConfig?.extra ?? {}) as { apiBaseUrl?: string; useMockApi?: boolean };
-const BASE = extra.apiBaseUrl ?? 'http://localhost:4000';
 const USE_MOCK = extra.useMockApi ?? true;
 
+/**
+ * Resolve the API base URL. On a physical device / emulator, "localhost" points
+ * at the device itself — NOT the dev machine — so a localhost apiBaseUrl can't
+ * reach the backend ("could not load your field"). In dev we therefore rewrite a
+ * localhost host to the IP the device already used to reach the Expo/Metro
+ * server (Constants…hostUri), keeping the configured port. On web / iOS
+ * simulator that host IS localhost, so nothing changes. Set extra.apiBaseUrl to
+ * an explicit non-localhost URL (e.g. a deployed API) to opt out of rewriting.
+ */
+function resolveBase(): string {
+  const configured = extra.apiBaseUrl ?? 'http://localhost:4000';
+  try {
+    if (!/\/\/(localhost|127\.0\.0\.1)\b/.test(configured)) return configured; // explicit/remote → use as-is
+    const hostUri =
+      (Constants.expoConfig as { hostUri?: string } | null)?.hostUri ??
+      (Constants as { expoGoConfig?: { debuggerHost?: string } }).expoGoConfig?.debuggerHost ??
+      '';
+    const host = String(hostUri).split('/')[0].split(':')[0];
+    if (host && host !== 'localhost' && host !== '127.0.0.1') {
+      const port = configured.split(':').pop()?.replace(/\D.*$/, '') || '4000';
+      return `http://${host}:${port}`;
+    }
+  } catch {
+    /* fall back to the configured value */
+  }
+  return configured;
+}
+
+const BASE = resolveBase();
+
 // ---------------------------------------------------------------------------
-// access-token store (set on login; sent as Bearer on every authed call)
+// token store — access + refresh held in memory; the access token is sent as a
+// Bearer on every authed call, and the refresh token is used to silently rotate
+// on a 401. A persist hook lets the auth layer write rotated tokens back to
+// SecureStore so a refresh survives an app restart.
 // ---------------------------------------------------------------------------
 
 let accessToken: string | null = null;
+let refreshToken: string | null = null;
+let onTokensPersist: ((access: string, refresh: string | null) => void) | null = null;
+
+export function setTokens(access: string | null, refresh: string | null): void {
+  accessToken = access;
+  refreshToken = refresh;
+}
+/** Back-compat: set only the access token (the refresh token is left unchanged). */
 export function setAccessToken(token: string | null): void {
   accessToken = token;
 }
 export function getAccessToken(): string | null {
   return accessToken;
 }
+/** Wire a callback invoked when tokens are silently refreshed (persist to SecureStore). */
+export function setOnTokensPersist(
+  fn: ((access: string, refresh: string | null) => void) | null,
+): void {
+  onTokensPersist = fn;
+}
 
-async function http<T>(path: string, init?: RequestInit): Promise<T> {
+/** Wire a callback invoked when a request 401s and cannot be refreshed — the auth
+ *  layer uses it to clear the session and send the user back to login (instead of
+ *  a stuck "could not load" screen with a dead/stale token). */
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(fn: (() => void) | null): void {
+  onUnauthorized = fn;
+}
+
+let refreshing: Promise<boolean> | null = null;
+
+/** Rotate access (+ refresh) via /auth/refresh using the in-memory refresh token. */
+async function refreshTokens(): Promise<boolean> {
+  if (USE_MOCK || !refreshToken) return false;
+  if (!refreshing) {
+    refreshing = (async (): Promise<boolean> => {
+      try {
+        const res = await fetch(`${BASE}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+        if (!res.ok) return false;
+        const data = (await res.json()) as { accessToken: string; refreshToken?: string };
+        accessToken = data.accessToken;
+        if (data.refreshToken) refreshToken = data.refreshToken;
+        onTokensPersist?.(accessToken, refreshToken);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        refreshing = null;
+      }
+    })();
+  }
+  return refreshing;
+}
+
+async function http<T>(path: string, init?: RequestInit, retried = false): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
@@ -71,7 +159,15 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
       ...(init?.headers ?? {}),
     },
   });
+  // On a 401, try a single silent token refresh, then replay the request once.
+  if (res.status === 401 && !retried && !USE_MOCK && refreshToken) {
+    if (await refreshTokens()) return http<T>(path, init, true);
+  }
   if (!res.ok) {
+    // An unrecoverable 401 (no/stale refresh token, or refresh failed) means the
+    // session is dead — tell the auth layer to log out so the user re-authenticates
+    // rather than seeing a network-style error.
+    if (res.status === 401 && !USE_MOCK) onUnauthorized?.();
     let detail = '';
     try {
       detail = (await res.text()).slice(0, 300);
@@ -112,14 +208,46 @@ export const api = {
         account,
       };
       accessToken = res.accessToken;
+      refreshToken = res.refreshToken ?? null;
       return res;
     }
-    const res = await http<LoginResponse>('/auth/login', {
+    // Direct fetch (not http()) so a 401 surfaces as bad credentials rather than
+    // triggering a refresh attempt with a stale token.
+    const r = await fetch(`${BASE}/auth/login`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
+    if (!r.ok) {
+      let detail = '';
+      try {
+        detail = (await r.text()).slice(0, 300);
+      } catch {
+        /* ignore */
+      }
+      throw new Error(`API ${r.status} /auth/login${detail ? ` — ${detail}` : ''}`);
+    }
+    const res = (await r.json()) as LoginResponse;
     accessToken = res.accessToken;
+    refreshToken = res.refreshToken ?? null;
     return res;
+  },
+
+  /** POST /auth/logout — revoke the refresh token server-side + clear local tokens. */
+  async logout(): Promise<void> {
+    if (!USE_MOCK && refreshToken) {
+      try {
+        await fetch(`${BASE}/auth/logout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+      } catch {
+        /* best-effort */
+      }
+    }
+    accessToken = null;
+    refreshToken = null;
   },
 
   /** GET /me → { user, account }. */
@@ -189,6 +317,19 @@ export const api = {
     return res.farms;
   },
 
+  /** GET /farms/:id/gateway → the ESP32 brain bound to a farm (or null). */
+  async gateway(farmId: string): Promise<Gateway | null> {
+    if (USE_MOCK) return mock.gateways.find((g) => g.farmId === farmId) ?? mock.gateways[0] ?? null;
+    return http<Gateway | null>(`/farms/${farmId}/gateway`);
+  },
+
+  /** GET /farms/:id/readings → newest reading per channel (soil + weather + flow). */
+  async readings(farmId: string): Promise<FarmReading[]> {
+    if (USE_MOCK) return [];
+    const res = await http<FarmReadingsResponse>(`/farms/${farmId}/readings`);
+    return res.readings;
+  },
+
   // -- zones -----------------------------------------------------------------
 
   /** GET /farms/:id/zones → ZoneWithCrop[] (zone + its crop ref). */
@@ -202,6 +343,24 @@ export const api = {
     return res.zones;
   },
 
+  /** POST /zones → create a new zone (server caps it at the zoneNodes entitlement). */
+  async createZone(body: CreateZoneRequest): Promise<Zone> {
+    if (USE_MOCK) {
+      return {
+        id: `zone_${Date.now()}`,
+        farmId: body.farmId,
+        name: body.name,
+        cropId: body.cropId ?? null,
+        plantingDate: body.plantingDate ?? null,
+        areaM2: body.areaM2 ?? null,
+        nodeId: null,
+        mode: body.mode ?? 'auto',
+        createdAt: new Date().toISOString(),
+      } as Zone;
+    }
+    return http<CreateZoneResponse>('/zones', { method: 'POST', body: JSON.stringify(body) });
+  },
+
   /** A single zone (derived client-side from the zones list / by id). */
   async zone(zoneId: string): Promise<ZoneWithCrop> {
     if (USE_MOCK) {
@@ -209,9 +368,7 @@ export const api = {
       if (!z) throw new Error(`zone ${zoneId} not found`);
       return { ...z, crop: z.cropId ? (mock.cropRefs.find((c) => c.id === z.cropId) ?? null) : null };
     }
-    // The REST API has no GET /zones/:id; resolve via the owning farm's list.
-    // Callers that already know the farm should prefer api.zones(farmId).
-    throw new Error('api.zone: pass through api.zones(farmId) against the live API');
+    return http<ZoneWithCrop>(`/zones/${zoneId}`);
   },
 
   /** GET /zones/:id/analysis → ZoneAnalysis (+ zoneId, cropId, readings). */
@@ -251,17 +408,20 @@ export const api = {
     });
   },
 
-  /** Convenience: open/close a zone's valve (resolves the valve actuator). */
+  /** Convenience: open/close a zone's valve (server resolves the valve actuator). */
   async setValve(zoneId: string, open: boolean): Promise<ActuatorCommandResponse> {
     if (USE_MOCK) return mock.commandActuator(mock.valveActuatorId(zoneId), open ? 'open' : 'close');
-    // For the live API the caller resolves the valve actuator id from the zone.
-    return this.command(zoneId, open ? 'open' : 'close');
+    return http<ActuatorCommandResponse>(`/zones/${zoneId}/valve`, {
+      method: 'POST',
+      body: JSON.stringify({ open }),
+    });
   },
 
-  /** Current actuator snapshot (mock-only convenience for pump/dosing tiles). */
-  async actuators(): Promise<Actuator[]> {
+  /** Actuator snapshot for a farm (pump / dosing / per-zone valves). */
+  async actuators(farmId?: string): Promise<Actuator[]> {
     if (USE_MOCK) return mock.getActuators();
-    return http<Actuator[]>('/actuators');
+    if (!farmId) return [];
+    return http<Actuator[]>(`/farms/${farmId}/actuators`);
   },
 
   // -- rules -----------------------------------------------------------------

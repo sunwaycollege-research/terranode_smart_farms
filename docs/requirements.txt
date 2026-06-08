@@ -1,0 +1,13 @@
+# TERANODE documentation toolchain (Sphinx site + Doxygen bridge).
+# Install:  python3 -m pip install -r docs/requirements.txt
+# (Doxygen itself is a separate binary: `conda install -c conda-forge doxygen`
+#  or `apt-get install doxygen`.)
+
+sphinx>=7.2
+myst-parser>=2.0          # author pages in Markdown (MyST)
+breathe>=4.35             # embed Doxygen (firmware C++) XML into Sphinx
+furo>=2024.1              # clean, responsive enterprise theme
+sphinx-design>=0.5        # cards / grids / tabs
+sphinx-copybutton>=0.5    # copy buttons on code blocks
+sphinxcontrib-mermaid>=0.9  # Mermaid diagrams (client-side render, no node needed)
+linkify-it-py>=2.0        # MyST `linkify` (auto-link bare URLs)

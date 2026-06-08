@@ -1,0 +1,12 @@
+# Arduino libraries required by teranode_gateway.ino
+# Install via Arduino Library Manager (arduino-cli lib install "<name>") or
+# list under platformio.ini lib_deps.
+
+ModbusMaster            # 4-20mA / RS485 Modbus master for the 7-in-1 soil sensor
+DHT sensor library      # Adafruit — DHT22 air temp + humidity
+Adafruit Unified Sensor # dependency of the DHT library
+PubSubClient            # MQTT client (knolleary)
+ArduinoJson             # JSON encode/decode for telemetry + provisioning (v6+)
+
+# Built into the ESP32 Arduino core (no install needed):
+#   WiFi, HTTPClient, Preferences (NVS)

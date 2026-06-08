@@ -48,9 +48,9 @@ const STAGE_EMOJI: Record<GrowthStage, string> = {
 export function StageBadge({ stage }: { stage: GrowthStage }) {
   const { fs } = useScale();
   return (
-    <View style={[s.stageBadge, { borderColor: colors.borderSoft }]}>
-      <T style={{ fontSize: fs(11) }}>{STAGE_EMOJI[stage]}</T>
-      <T tx={STAGE_KEY[stage]} style={{ fontFamily: fonts.uiMedium, fontSize: fs(11), color: colors.primaryInk }} />
+    <View style={[s.stageBadge, { borderColor: colors.primarySoft, backgroundColor: colors.primarySoft }]}>
+      <T style={{ fontSize: fs(11) }} accessibilityElementsHidden importantForAccessibility="no">{STAGE_EMOJI[stage]}</T>
+      <T tx={STAGE_KEY[stage]} style={{ fontFamily: fonts.uiSemibold, fontSize: fs(11), color: colors.primaryInk }} />
     </View>
   );
 }
@@ -63,7 +63,7 @@ function cropName(zone: ZoneWithCrop, lang: Lang): string {
 
 /** Find a channel's status row in an analysis. */
 function chan(analysis: ZoneAnalysisResponse | undefined, key: ChannelStatus['channel']): ChannelStatus | undefined {
-  return analysis?.channels.find((c) => c.channel === key);
+  return analysis?.channels?.find((c) => c.channel === key);
 }
 
 /** Moisture against the analysis ideal band → a signal color. */
@@ -110,12 +110,17 @@ export function FieldTile({
   const open = pending ? Boolean(valve?.desired) : reportedOpen;
 
   return (
-    <Pressable onPress={onPress} style={s.zone}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [s.zone, pressed && { opacity: 0.92, borderColor: colors.borderStrong }]}
+      accessibilityRole="button"
+      accessibilityLabel={`${zone.name}, ${cropName(zone, lang)}${analysis ? `, health ${Math.round(score)}` : ''}`}
+    >
       <View style={s.zhead}>
-        <T style={{ fontSize: fs(22) }}>{emoji}</T>
+        <T style={{ fontSize: fs(22) }} accessibilityElementsHidden importantForAccessibility="no">{emoji}</T>
         <View style={{ flex: 1 }}>
-          <T variant="label" style={{ color: colors.ink, fontFamily: fonts.uiSemibold }}>{zone.name}</T>
-          <T variant="muted">{cropName(zone, lang)}</T>
+          <T variant="label" style={{ color: colors.ink, fontFamily: fonts.uiSemibold }} numberOfLines={1}>{zone.name}</T>
+          <T variant="muted" numberOfLines={1}>{cropName(zone, lang)}</T>
         </View>
         {analysis ? (
           <HealthRing score={score} size={40} showLabel scaleWithField />
@@ -131,10 +136,16 @@ export function FieldTile({
       )}
 
       {/* soil moisture column */}
-      <View style={s.soil}>
+      <View
+        style={s.soil}
+        accessibilityRole="image"
+        accessibilityLabel={`Soil moisture ${moisture != null ? `${Math.round(moisture)} percent` : 'no data'}`}
+      >
         <View style={[s.soilFill, { height: `${Math.max(0, Math.min(100, moisture ?? 0))}%`, backgroundColor: mc, opacity: 0.85 }]} />
-        <T style={[s.moistNum, { fontSize: fs(15) }]}>{moisture != null ? `${Math.round(moisture)}%` : '—'}</T>
-        {open && <T style={s.drop}>💧</T>}
+        <View style={s.moistBadge}>
+          <T style={[s.moistNum, { fontSize: fs(14) }]}>{moisture != null ? `${Math.round(moisture)}%` : '—'}</T>
+        </View>
+        {open && <T style={s.drop} accessibilityLabel="Watering">💧</T>}
       </View>
 
       <View style={s.chips}>
@@ -144,14 +155,18 @@ export function FieldTile({
       </View>
 
       <View style={s.zctrl}>
-        <View style={[s.valve, { backgroundColor: open ? colors.primary : colors.surface2 }]}>
-          <T style={{ fontFamily: fonts.mono, fontSize: fs(11), color: open ? '#fff' : colors.muted }}>
-            {pending ? '…' : open ? 'OPEN' : 'shut'}
+        <View
+          style={[s.valve, { backgroundColor: open ? colors.primary : colors.surface2, borderColor: open ? colors.primary : colors.border }]}
+          accessibilityLabel={`Valve ${pending ? 'changing' : open ? 'open' : 'closed'}`}
+        >
+          <T style={{ fontFamily: fonts.mono, fontSize: fs(11), color: open ? '#fff' : colors.muted, letterSpacing: 0.5 }}>
+            {pending ? '…' : open ? 'OPEN' : 'SHUT'}
           </T>
         </View>
         <Pill
           label={zone.mode === 'auto' ? 'AUTO' : 'MANUAL'}
           color={zone.mode === 'manual' ? colors.warn : colors.muted}
+          dot
         />
       </View>
     </Pressable>
@@ -162,7 +177,7 @@ function Chip({ text }: { text: string }) {
   const { fs } = useScale();
   return (
     <View style={s.chip}>
-      <T style={{ fontFamily: fonts.mono, fontSize: fs(11), color: colors.muted }}>{text}</T>
+      <T style={{ fontFamily: fonts.mono, fontSize: fs(11), color: colors.inkSoft, fontVariant: ['tabular-nums'] }}>{text}</T>
     </View>
   );
 }
@@ -183,11 +198,15 @@ export function SystemCard({
 }) {
   const { fs } = useScale();
   return (
-    <View style={[s.sys, on && { borderColor: colors.primary }, offline && { borderColor: colors.critical }]}>
-      <T style={{ fontSize: fs(24) }}>{icon}</T>
+    <View
+      style={[s.sys, on && { borderColor: colors.primary, borderWidth: 1.5 }, offline && { borderColor: colors.critical, borderWidth: 1.5 }]}
+      accessibilityRole="text"
+      accessibilityLabel={`${label}: ${state}${offline ? ', offline' : ''}`}
+    >
+      <T style={{ fontSize: fs(24) }} accessibilityElementsHidden importantForAccessibility="no">{icon}</T>
       <View style={{ flex: 1 }}>
-        <T variant="muted">{label}</T>
-        <T style={{ fontFamily: fonts.uiBold, fontSize: fs(15), color: offline ? colors.critical : on ? colors.primary : colors.ink }}>
+        <T variant="muted" numberOfLines={1}>{label}</T>
+        <T style={{ fontFamily: fonts.uiBold, fontSize: fs(15), color: offline ? colors.critical : on ? colors.primary : colors.ink }} numberOfLines={1}>
           {state}
         </T>
       </View>
@@ -235,9 +254,9 @@ export function WeatherStrip({ weather }: { weather: WeatherSummary }) {
 function Wx({ label, value }: { label: string; value: string }) {
   const { fs } = useScale();
   return (
-    <View>
+    <View style={{ minWidth: 64 }} accessibilityRole="text" accessibilityLabel={`${label} ${value}`}>
       <T variant="muted">{label}</T>
-      <T style={{ fontFamily: fonts.mono, fontSize: fs(16), color: colors.ink }}>{value}</T>
+      <T style={{ fontFamily: fonts.mono, fontSize: fs(16), color: colors.ink, fontVariant: ['tabular-nums'] }}>{value}</T>
     </View>
   );
 }
@@ -249,13 +268,13 @@ export function SavingsTile({ savedL, savedPct, waterUsedL }: { savedL: number; 
   return (
     <View style={s.savings}>
       <View style={{ flex: 1 }}>
-        <T style={{ fontFamily: fonts.mono, fontSize: fs(30), color: colors.primary }}>{Math.round(savedL)} L</T>
+        <T style={{ fontFamily: fonts.mono, fontSize: fs(30), color: colors.primary, fontVariant: ['tabular-nums'] }}>{Math.round(savedL)} L</T>
         <T variant="muted">
           {t('analytics.savings')} · {savedPct}% {t('analytics.saved')}
         </T>
       </View>
       <View style={{ alignItems: 'flex-end' }}>
-        <T style={{ fontFamily: fonts.mono, fontSize: fs(15), color: colors.ink }}>{Math.round(waterUsedL)} L</T>
+        <T style={{ fontFamily: fonts.mono, fontSize: fs(15), color: colors.ink, fontVariant: ['tabular-nums'] }}>{Math.round(waterUsedL)} L</T>
         <T variant="muted">{t('analytics.water')}</T>
       </View>
     </View>
@@ -295,12 +314,24 @@ const s = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   soilFill: { width: '100%' },
-  moistNum: { position: 'absolute', top: 6, right: 8, fontFamily: fonts.mono, color: colors.ink },
+  // A small parchment chip backs the % so it stays legible over any fill colour.
+  moistBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    borderRadius: radius.r1,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  moistNum: { fontFamily: fonts.mono, color: colors.ink, fontVariant: ['tabular-nums'] },
   drop: { position: 'absolute', top: 6, left: 8, fontSize: 14 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
   chip: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 3 },
   zctrl: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  valve: { borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 },
+  valve: { borderRadius: radius.pill, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 5 },
   sys: {
     flex: 1,
     minWidth: 150,
@@ -314,6 +345,6 @@ const s = StyleSheet.create({
     padding: spacing.md,
   },
   weather: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  wxGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 18, flex: 1 },
+  wxGrid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 12, columnGap: 16, flex: 1 },
   savings: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md },
 });

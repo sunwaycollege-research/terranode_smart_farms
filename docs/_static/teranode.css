@@ -1,0 +1,21 @@
+/* TERANODE docs — light enterprise polish on top of the Furo theme. */
+
+:root {
+  --tn-green: #2f6b46;
+  --tn-soil: #6b5b46;
+}
+
+/* Tighten code blocks + give Mermaid diagrams breathing room. */
+.highlight pre { font-size: 0.86rem; line-height: 1.5; }
+.mermaid { margin: 1.25rem 0; text-align: center; }
+
+/* Component/contract tables read like spec sheets. */
+table.docutils { font-size: 0.9rem; }
+table.docutils th { background: rgba(47, 107, 70, 0.08); }
+
+/* sphinx-design cards: subtle brand accent. */
+.sd-card { border-radius: 10px; }
+.sd-card:hover { border-color: var(--tn-green); }
+
+/* Status pills used in prose: {sub}`...` not needed — use inline code styling. */
+code.literal { background: rgba(47, 107, 70, 0.07); border-radius: 4px; padding: 0 4px; }

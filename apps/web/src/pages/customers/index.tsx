@@ -3,7 +3,7 @@
 //   index            → list (search + table; row click → detail; "New customer" → wizard)
 //   :id              → CustomerDetail (account, summary, entitlement editor, enable/disable)
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Route, Routes, useNavigate } from 'react-router-dom';
+import { Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type {
   CustomerWithEntitlements,
@@ -34,6 +34,36 @@ function moduleCount(c: CustomerWithEntitlements, catalog: DeviceCatalogItem[]) 
     if (enabled) on += 1;
   }
   return { on, total: catalog.length };
+}
+
+/** Skeleton rows that mirror the customer table while the list loads. */
+function CustomerListSkeleton({ columns }: { columns: number }) {
+  return (
+    <div className="tn-table-wrap" aria-hidden>
+      <table className="tn-table">
+        <tbody>
+          {Array.from({ length: 6 }).map((_, ri) => (
+            <tr key={ri} className="cu-skel-row">
+              <td>
+                <div className="cu-name">
+                  <span className="tn-skeleton cu-skel-avatar" />
+                  <div className="cu-name__meta" style={{ flex: 1 }}>
+                    <span className="tn-skeleton tn-skeleton--text" style={{ width: '60%' }} />
+                    <span className="tn-skeleton tn-skeleton--text" style={{ width: '32%' }} />
+                  </div>
+                </div>
+              </td>
+              {Array.from({ length: Math.max(0, columns - 1) }).map((__, ci) => (
+                <td key={ci}>
+                  <span className="tn-skeleton tn-skeleton--text" style={{ width: '64%' }} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function CustomersList() {
@@ -178,34 +208,80 @@ function CustomersList() {
             onChange={(e) => setQuery(e.target.value)}
             aria-label={t('list.search')}
           />
+          {query && (
+            <button
+              type="button"
+              className="cu-search__clear"
+              onClick={() => setQuery('')}
+              aria-label={t('list.clearSearch')}
+            >
+              ✕
+            </button>
+          )}
         </div>
-        <span className="tn-muted">{t('list.count', { count: filtered.length })}</span>
+        <span className="tn-muted tn-nowrap">
+          {loading ? (
+            <span className="tn-skeleton tn-skeleton--text" style={{ width: 84, display: 'inline-block' }} />
+          ) : (
+            t('list.count', { count: filtered.length })
+          )}
+        </span>
       </div>
 
       {error ? (
         <Card>
-          <div className="tn-stack" style={{ alignItems: 'flex-start' }}>
-            <p className="tn-muted" style={{ margin: 0 }}>
-              {error}
-            </p>
-            <Button variant="secondary" size="sm" onClick={() => void load()}>
-              {t('translation:common.retry')}
-            </Button>
+          <div className="tn-state tn-state--error" role="alert">
+            <span className="tn-state__icon" aria-hidden>
+              !
+            </span>
+            <p className="tn-state__title">{t('list.errorTitle')}</p>
+            <p className="tn-state__body">{error}</p>
+            <div className="tn-state__actions">
+              <Button variant="secondary" size="sm" onClick={() => void load()}>
+                {t('translation:common.retry')}
+              </Button>
+            </div>
           </div>
+        </Card>
+      ) : loading ? (
+        <Card flush>
+          <CustomerListSkeleton columns={columns.length} />
         </Card>
       ) : (
         <Card flush>
           <Table<CustomerWithEntitlements>
             columns={columns}
-            rows={loading ? [] : filtered}
+            rows={filtered}
             rowKey={(c) => c.account.id}
             onRowClick={(c) => navigate(`/customers/${c.account.id}`)}
             empty={
-              loading
-                ? t('detail.loading')
-                : query.trim()
-                  ? t('list.noMatch', { q: query.trim() })
-                  : t('list.empty')
+              query.trim() ? (
+                <div className="tn-state">
+                  <span className="tn-state__icon" aria-hidden>
+                    ⌕
+                  </span>
+                  <p className="tn-state__title">{t('list.noMatchTitle')}</p>
+                  <p className="tn-state__body">{t('list.noMatch', { q: query.trim() })}</p>
+                  <div className="tn-state__actions">
+                    <Button variant="secondary" size="sm" onClick={() => setQuery('')}>
+                      {t('list.clearSearch')}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="tn-state">
+                  <span className="tn-state__icon" aria-hidden>
+                    ☺
+                  </span>
+                  <p className="tn-state__title">{t('list.emptyTitle')}</p>
+                  <p className="tn-state__body">{t('list.empty')}</p>
+                  <div className="tn-state__actions">
+                    <Button size="sm" onClick={() => setWizardOpen(true)} icon={<span aria-hidden>+</span>}>
+                      {t('list.new')}
+                    </Button>
+                  </div>
+                </div>
+              )
             }
           />
         </Card>
@@ -228,11 +304,84 @@ function CustomersList() {
   );
 }
 
+/**
+ * Detail route: the existing CustomerDetail plus a destructive "Danger zone"
+ * card that permanently deletes the customer (and all their farms, devices, and
+ * telemetry). Confirms before deleting, then returns to the list on success.
+ */
+function CustomerDetailRoute() {
+  const { id = '' } = useParams();
+  const navigate = useNavigate();
+  const { t } = useTranslation(CUSTOMERS_NS);
+
+  const [name, setName] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Grab the display name so the confirm prompt can name what is destroyed.
+  useEffect(() => {
+    let alive = true;
+    api
+      .getCustomer(id)
+      .then((c) => {
+        if (alive) setName(c.account.name);
+      })
+      .catch(() => {
+        /* CustomerDetail surfaces its own load error; the prompt falls back to the id. */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+
+  async function handleDelete() {
+    if (deleting) return;
+    const label = name || id;
+    if (!window.confirm(t('detail.deleteConfirm', { name: label }))) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await api.deleteCustomer(id);
+      // Row is gone — go back to the (reloading) list.
+      navigate('/customers');
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : t('detail.deleteError'));
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <div>
+      <CustomerDetail />
+      <div className="cu-detail" style={{ marginTop: 'var(--sp-lg)' }}>
+        <Card title={t('detail.dangerZone')}>
+          <p className="tn-muted" style={{ marginTop: 0, marginBottom: 'var(--sp-lg)' }}>
+            {t('detail.dangerLead')}
+          </p>
+          {error && (
+            <div className="cu-notice cu-notice--warn" role="alert" aria-live="polite">
+              <span className="cu-notice__icon" aria-hidden>
+                ⚠
+              </span>
+              <span>{error}</span>
+            </div>
+          )}
+          <div className="tn-row">
+            <Button variant="danger" loading={deleting} onClick={handleDelete}>
+              {deleting ? t('detail.deleting') : t('detail.delete')}
+            </Button>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 export default function CustomersPage() {
   return (
     <Routes>
       <Route index element={<CustomersList />} />
-      <Route path=":id" element={<CustomerDetail />} />
+      <Route path=":id" element={<CustomerDetailRoute />} />
     </Routes>
   );
 }

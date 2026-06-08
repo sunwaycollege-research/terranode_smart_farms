@@ -38,6 +38,9 @@ export function toDbChannelType(name: string): string | null {
     pressure: 'pressure',
     rain: 'rain',
     rainfall: 'rain',
+    flow: 'flow',
+    flowlpm: 'flow',
+    flow_lpm: 'flow',
   };
   return aliases[lower] ?? null;
 }

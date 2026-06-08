@@ -1,0 +1,33 @@
+Component,Pin Name,Board Pin,Function
+NBL-S-TMC-7 7-in-1 Soil Composite Sensor,VCC,3V3,POWER
+NBL-S-TMC-7 7-in-1 Soil Composite Sensor,GND,GND,GROUND
+NBL-S-TMC-7 7-in-1 Soil Composite Sensor,RS485-A,GPIO4,DIGITAL
+NBL-S-TMC-7 7-in-1 Soil Composite Sensor,RS485-B,GPIO13,DIGITAL
+RS485 to TTL Module (MAX485),VCC,5V,POWER
+RS485 to TTL Module (MAX485),GND,GND,GROUND
+RS485 to TTL Module (MAX485),TX,GPIO16,UART
+RS485 to TTL Module (MAX485),RX,GPIO17,UART
+RS485 to TTL Module (MAX485),DE_RE,GPIO14,DIGITAL
+RS485 to TTL Module (MAX485),A,→ RS485 bus A,DATA
+RS485 to TTL Module (MAX485),B,→ RS485 bus B,DATA
+DHT22,VCC,3V3,POWER
+DHT22,GND,GND,GROUND
+DHT22,DATA,GPIO18,DATA
+Rain Sensor Module,VCC,3V3,POWER
+Rain Sensor Module,GND,GND,GROUND
+Rain Sensor Module,D0,GPIO19,DIGITAL
+Rain Sensor Module,A0,GPIO25,ANALOG
+YF-S201 Flow Sensor,Power,VCC,POWER
+YF-S201 Flow Sensor,Ground,GND,GROUND
+YF-S201 Flow Sensor,Signal,GPIO21,DIGITAL
+12V DC Submersible Mini Water Pump,PUMP+,→ External driver switched positive or supply positive,DATA
+12V DC Submersible Mini Water Pump,PUMP-,→ External driver switched negative or supply return,DATA
+12V Solenoid Valve,VCC,3V3,POWER
+12V Solenoid Valve,GND,GND,GROUND
+Relay Module,VCC,5V,POWER
+Relay Module,GND,GND,GROUND
+Relay Module,IN,GPIO22,DIGITAL
+Buck Converter,VCC,3V3,POWER
+Buck Converter,GND,GND,GROUND
+12V DC Power Supply,VCC,3V3,POWER
+12V DC Power Supply,GND,GND,GROUND

@@ -104,9 +104,9 @@ export default function CropsPage() {
       width: '110px',
       align: 'right',
       cell: (c) => (
-        <span>
-          <span className="cr-d2h">{c.daysToHarvest}</span>{' '}
-          <span className="tn-muted">days</span>
+        <span className="cr-harvest">
+          <span className="cr-d2h">{c.daysToHarvest}</span>
+          <span className="cr-harvest__unit">days</span>
         </span>
       ),
     },
@@ -124,7 +124,7 @@ export default function CropsPage() {
       ),
     },
     {
-      header: '',
+      header: <span className="tn-visually-hidden">Actions</span>,
       width: '88px',
       align: 'right',
       cell: (c) => (
@@ -135,6 +135,7 @@ export default function CropsPage() {
             e.stopPropagation();
             openEdit(c);
           }}
+          aria-label={`Edit ${c.nameEn}`}
         >
           {t('common.edit')}
         </Button>
@@ -165,26 +166,48 @@ export default function CropsPage() {
             : `${filtered.length} of ${total} crops`
         }
         actions={
-          <div className="cr-toolbar" style={{ margin: 0 }}>
+          <div className="cr-toolbar cr-toolbar--flush">
             <div className="cr-search">
+              <span className="cr-search__icon" aria-hidden>
+                🔍
+              </span>
               <TextField
+                className="cr-search__input"
                 placeholder={`${t('common.search')}…`}
                 value={query}
                 onChange={setQuery}
                 aria-label={t('common.search')}
               />
+              {query ? (
+                <button
+                  type="button"
+                  className="cr-search__clear"
+                  onClick={() => setQuery('')}
+                  aria-label="Clear search"
+                >
+                  ×
+                </button>
+              ) : null}
             </div>
-            <div className="cr-chips">
+            <div
+              className="cr-chips"
+              role="group"
+              aria-label="Filter by category"
+            >
               <button
+                type="button"
                 className={`cr-chip${cat === 'all' ? ' is-active' : ''}`}
+                aria-pressed={cat === 'all'}
                 onClick={() => setCat('all')}
               >
                 All
               </button>
               {CROP_CATEGORIES.map((c) => (
                 <button
+                  type="button"
                   key={c}
                   className={`cr-chip${cat === c ? ' is-active' : ''}`}
+                  aria-pressed={cat === c}
                   onClick={() => setCat(c)}
                 >
                   <span aria-hidden>{CATEGORY_GLYPH[c]} </span>
@@ -197,17 +220,68 @@ export default function CropsPage() {
       >
         <Table<CropRef>
           columns={columns}
-          rows={filtered}
+          rows={loading ? [] : filtered}
           rowKey={(c) => c.id}
           onRowClick={openEdit}
           empty={
-            loading
-              ? t('common.loading')
-              : error
-                ? error
-                : query || cat !== 'all'
-                  ? 'No crops match your filters.'
-                  : t('common.empty')
+            loading ? (
+              <div className="tn-state" role="status" aria-live="polite">
+                <span className="tn-spinner tn-spinner--lg" aria-hidden />
+                <span className="tn-state__title">{t('common.loading')}</span>
+              </div>
+            ) : error ? (
+              <div className="tn-state tn-state--error" role="alert">
+                <span className="tn-state__icon" aria-hidden>
+                  ⚠
+                </span>
+                <span className="tn-state__title">{t('common.error')}</span>
+                <p className="tn-state__body">{error}</p>
+                <div className="tn-state__actions">
+                  <Button variant="secondary" size="sm" onClick={() => void load()}>
+                    {t('common.retry')}
+                  </Button>
+                </div>
+              </div>
+            ) : query || cat !== 'all' ? (
+              <div className="tn-state">
+                <span className="tn-state__icon" aria-hidden>
+                  🔍
+                </span>
+                <span className="tn-state__title">No crops match your filters</span>
+                <p className="tn-state__body">
+                  Try a different search term or clear the category filter.
+                </p>
+                {(query || cat !== 'all') && (
+                  <div className="tn-state__actions">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setQuery('');
+                        setCat('all');
+                      }}
+                    >
+                      Clear filters
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="tn-state">
+                <span className="tn-state__icon" aria-hidden>
+                  🌱
+                </span>
+                <span className="tn-state__title">No crops yet</span>
+                <p className="tn-state__body">
+                  Add your first crop to build the agronomy library.
+                </p>
+                <div className="tn-state__actions">
+                  <Button size="sm" onClick={openCreate}>
+                    + Add crop
+                  </Button>
+                </div>
+              </div>
+            )
           }
         />
       </Card>

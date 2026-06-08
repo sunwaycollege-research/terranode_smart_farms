@@ -17,6 +17,7 @@ import {
   TextField,
 } from '../../components';
 import type { BadgeTone } from '../../components';
+import './audit.css';
 
 // --- presentation helpers -----------------------------------------------------
 
@@ -123,39 +124,13 @@ function AuditDiff({ entry }: { entry: AuditEntry }) {
   );
 
   if (entry.before == null && entry.after == null) {
-    return (
-      <p className="tn-muted" style={{ margin: 0, fontSize: 13 }}>
-        {t('common.empty')}
-      </p>
-    );
+    return <p className="au-detail__empty">{t('common.empty')}</p>;
   }
 
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(120px, 0.6fr) 1fr 1fr',
-        gap: '1px',
-        background: 'var(--border-soft)',
-        border: '1px solid var(--border-soft)',
-        borderRadius: 'var(--r2)',
-        overflow: 'hidden',
-        fontSize: 13,
-      }}
-    >
+    <div className="au-diff">
       {(['field', 'before', 'after'] as const).map((h) => (
-        <div
-          key={h}
-          style={{
-            background: 'var(--surface-2)',
-            padding: '8px 12px',
-            fontSize: 11,
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: '0.04em',
-            color: 'var(--muted)',
-          }}
-        >
+        <div key={h} className="au-diff__head">
           {h}
         </div>
       ))}
@@ -170,50 +145,79 @@ function DiffCells({ row }: { row: DiffRow }) {
   const dim = row.status === 'same';
   const cell = (content: string, side: 'before' | 'after') => {
     const isChange =
-      (side === 'before' && (row.status === 'removed' || row.status === 'changed')) ||
+      (side === 'before' &&
+        (row.status === 'removed' || row.status === 'changed')) ||
       (side === 'after' && (row.status === 'added' || row.status === 'changed'));
+    const classes = [
+      'au-diff__cell',
+      'mono',
+      dim ? 'au-diff__cell--same' : '',
+      isChange ? 'au-diff__cell--change' : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
     return (
-      <div
-        className="mono"
-        style={{
-          background: 'var(--surface)',
-          padding: '8px 12px',
-          color: dim ? 'var(--subtle)' : 'var(--ink-soft)',
-          fontWeight: isChange ? 600 : 400,
-          wordBreak: 'break-word',
-          whiteSpace: 'pre-wrap',
-        }}
-      >
-        {content || <span style={{ color: 'var(--subtle)' }}>—</span>}
+      <div className={classes}>
+        {content || <span className="au-diff__nil">—</span>}
       </div>
     );
   };
   return (
     <>
-      <div
-        style={{
-          background: 'var(--surface)',
-          padding: '8px 12px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          fontWeight: 500,
-        }}
-      >
+      <div className="au-diff__field">
         <span
-          style={{
-            width: 7,
-            height: 7,
-            borderRadius: '50%',
-            background: DIFF_DOT[row.status],
-            flex: 'none',
-          }}
+          className="au-diff__dot"
+          style={{ background: DIFF_DOT[row.status] }}
         />
         {row.key}
       </div>
       {cell(stringify(row.before), 'before')}
       {cell(stringify(row.after), 'after')}
     </>
+  );
+}
+
+// --- loading skeleton ---------------------------------------------------------
+
+/** Placeholder rows shown while the first page of entries loads. */
+function AuditSkeleton({ rows = 8 }: { rows?: number }) {
+  return (
+    <div className="tn-table-wrap" aria-hidden>
+      <table className="tn-table au-table">
+        <thead>
+          <tr>
+            <th className="au-caret-cell" />
+            <th>Action</th>
+            <th>Target</th>
+            <th>Actor</th>
+            <th>Account</th>
+            <th style={{ width: 180 }}>Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: rows }).map((_, i) => (
+            <tr key={i} className="au-skel-row">
+              <td className="au-caret-cell" />
+              <td>
+                <span className="tn-skeleton au-skel au-skel--badge" />
+              </td>
+              <td>
+                <span className="tn-skeleton au-skel au-skel--id" />
+              </td>
+              <td>
+                <span className="tn-skeleton au-skel au-skel--id" />
+              </td>
+              <td>
+                <span className="tn-skeleton au-skel au-skel--id" />
+              </td>
+              <td>
+                <span className="tn-skeleton au-skel au-skel--time" />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -270,13 +274,24 @@ export default function AuditPage() {
     });
   }, [entries, group, query]);
 
+  const isFiltering = group !== 'all' || query.trim().length > 0;
+  const clearFilters = () => {
+    setGroup('all');
+    setQuery('');
+  };
+
   return (
     <>
       <PageHeader
         title={t('page.audit.title')}
         subtitle={t('page.audit.subtitle')}
         actions={
-          <Button variant="secondary" size="sm" onClick={load} disabled={loading}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={load}
+            loading={loading}
+          >
             {t('common.retry')}
           </Button>
         }
@@ -285,23 +300,33 @@ export default function AuditPage() {
       <Card
         flush
         title={
-          <span>
-            {filtered.length} {filtered.length === 1 ? 'event' : 'events'}
+          <span className="au-count">
+            {loading ? (
+              <span
+                className="tn-skeleton tn-skeleton--text"
+                style={{ width: 96, display: 'inline-block' }}
+              />
+            ) : (
+              `${filtered.length} ${filtered.length === 1 ? 'event' : 'events'}`
+            )}
           </span>
         }
         actions={
-          <div className="tn-row" style={{ gap: 'var(--sp-sm)' }}>
-            <div style={{ minWidth: 200 }}>
+          <div className="au-toolbar">
+            <div className="au-search">
               <TextField
+                aria-label={t('common.search')}
                 placeholder={t('common.search')}
                 value={query}
                 onChange={setQuery}
+                disabled={loading || !!error}
               />
             </div>
             <Select
               aria-label="Action family"
               value={group}
               onChange={setGroup}
+              disabled={loading || !!error}
               options={[
                 { value: 'all', label: 'All actions' },
                 ...groups.map((g) => ({
@@ -314,28 +339,64 @@ export default function AuditPage() {
               aria-label="Row limit"
               value={String(limit)}
               onChange={(v) => setLimit(Number(v))}
-              options={LIMITS.map((n) => ({ value: String(n), label: `Last ${n}` }))}
+              disabled={loading || !!error}
+              options={LIMITS.map((n) => ({
+                value: String(n),
+                label: `Last ${n}`,
+              }))}
             />
           </div>
         }
       >
         {error ? (
-          <div className="tn-table__empty">
-            <p style={{ color: 'var(--critical)', marginBottom: 12 }}>{error}</p>
-            <Button variant="secondary" size="sm" onClick={load}>
-              {t('common.retry')}
-            </Button>
+          <div className="tn-state tn-state--error" role="alert">
+            <span className="tn-state__icon" aria-hidden>
+              !
+            </span>
+            <p className="tn-state__title">{t('common.error')}</p>
+            <p className="tn-state__body">{error}</p>
+            <div className="tn-state__actions">
+              <Button variant="secondary" size="sm" onClick={load}>
+                {t('common.retry')}
+              </Button>
+            </div>
           </div>
         ) : loading ? (
-          <div className="tn-table__empty">{t('common.loading')}</div>
+          <AuditSkeleton />
         ) : filtered.length === 0 ? (
-          <div className="tn-table__empty">{t('common.empty')}</div>
+          isFiltering ? (
+            <div className="tn-state">
+              <span className="tn-state__icon" aria-hidden>
+                ⌕
+              </span>
+              <p className="tn-state__title">No matching events</p>
+              <p className="tn-state__body">
+                No audit events match the current filter. Try a broader search
+                or a different action family.
+              </p>
+              <div className="tn-state__actions">
+                <Button variant="secondary" size="sm" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="tn-state">
+              <span className="tn-state__icon" aria-hidden>
+                ☑
+              </span>
+              <p className="tn-state__title">No activity yet</p>
+              <p className="tn-state__body">
+                Administrative actions will appear here as soon as they happen.
+              </p>
+            </div>
+          )
         ) : (
           <div className="tn-table-wrap">
-            <table className="tn-table">
+            <table className="tn-table au-table">
               <thead>
                 <tr>
-                  <th style={{ width: 36 }} />
+                  <th className="au-caret-cell" aria-hidden />
                   <th>Action</th>
                   <th>Target</th>
                   <th>Actor</th>
@@ -383,22 +444,34 @@ function AuditRowFragment({
   time: { date: string; time: string };
   onToggle: () => void;
 }) {
+  const detailId = `au-detail-${entry.id}`;
   return (
     <>
       <tr
-        className="tn-table__row--clickable"
+        className={[
+          'tn-table__row--clickable',
+          isOpen ? 'au-table__row--open' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
         onClick={onToggle}
-        style={isOpen ? { background: 'var(--surface-2)' } : undefined}
+        tabIndex={0}
+        role="button"
+        aria-expanded={isOpen}
+        aria-controls={isOpen ? detailId : undefined}
+        onKeyDown={(ev) => {
+          if (ev.key === 'Enter' || ev.key === ' ') {
+            ev.preventDefault();
+            onToggle();
+          }
+        }}
       >
-        <td style={{ textAlign: 'center' }}>
+        <td className="au-caret-cell">
           <span
             aria-hidden
-            style={{
-              display: 'inline-block',
-              color: 'var(--muted)',
-              transition: 'transform 0.14s ease',
-              transform: isOpen ? 'rotate(90deg)' : 'none',
-            }}
+            className={['au-caret', isOpen ? 'is-open' : '']
+              .filter(Boolean)
+              .join(' ')}
           >
             ▸
           </span>
@@ -408,29 +481,29 @@ function AuditRowFragment({
             {actionLabel(entry.action)}
           </Badge>
         </td>
-        <td className="mono" style={{ color: 'var(--ink-soft)' }}>
-          {entry.target ?? <span className="tn-muted">—</span>}
+        <td className="au-id au-id--target">
+          {entry.target ?? <span className="au-id--dim">—</span>}
         </td>
-        <td className="mono tn-muted" title={entry.actorId ?? undefined}>
+        <td className="au-id au-id--dim" title={entry.actorId ?? undefined}>
           {shortId(entry.actorId)}
         </td>
-        <td className="mono tn-muted" title={entry.accountId ?? undefined}>
+        <td className="au-id au-id--dim" title={entry.accountId ?? undefined}>
           {shortId(entry.accountId)}
         </td>
         <td>
-          <span style={{ fontWeight: 500 }}>{time.date}</span>{' '}
-          <span className="mono tn-muted" style={{ fontSize: 12 }}>
-            {time.time}
+          <span className="au-time">
+            <span className="au-time__date">{time.date}</span>
+            <span className="au-time__clock">{time.time}</span>
           </span>
         </td>
       </tr>
       {isOpen && (
         <tr>
-          <td colSpan={6} style={{ background: 'var(--bg-warm)', padding: 'var(--sp-lg) var(--sp-xl)' }}>
+          <td id={detailId} className="au-detail-cell" colSpan={6}>
             {hasDiff ? (
               <AuditDiff entry={entry} />
             ) : (
-              <p className="tn-muted" style={{ margin: 0, fontSize: 13 }}>
+              <p className="au-detail__empty">
                 No recorded before/after state for this action.
               </p>
             )}

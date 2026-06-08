@@ -4,7 +4,7 @@ import type { CropRef, CropCategory } from '@teranode/types';
 import { colors, fonts, radius, spacing } from '../theme/tokens';
 import { useScale } from '../theme/scale';
 import { useT, type Lang, type TranslationKey } from '../i18n';
-import { T } from './ui';
+import { EmptyState, T } from './ui';
 
 /* ---------------------------------------------------------------------------
  * CropPicker — searchable, category-filterable crop list.
@@ -38,7 +38,13 @@ function names(crop: CropRef, lang: Lang): { primary: string; secondary: string 
  * only — mirrors how the agronomy bands classify warm vs. cool-season crops.
  */
 export function climateFit(crop: CropRef): { en: string; ne: string; emoji: string } {
-  const [lo, hi] = crop.ideal.airTemp;
+  // Defensive: never let one crop with a missing/short airTemp band throw and
+  // blank the whole list — fall back to a neutral hint.
+  const band = crop.ideal?.airTemp;
+  if (!band || band.length < 2) {
+    return { en: 'Air temp —', ne: 'हावा तापक्रम —', emoji: '🌤️' };
+  }
+  const [lo, hi] = band;
   const mid = (lo + hi) / 2;
   if (mid >= 24) return { en: `Warm season · ${lo}–${hi}°C`, ne: `न्यानो मौसम · ${lo}–${hi}°C`, emoji: '🔥' };
   if (mid <= 18) return { en: `Cool season · ${lo}–${hi}°C`, ne: `चिसो मौसम · ${lo}–${hi}°C`, emoji: '❄️' };
@@ -47,15 +53,23 @@ export function climateFit(crop: CropRef): { en: string; ne: string; emoji: stri
 
 function CropRow({ crop, selected, onPress }: { crop: CropRef; selected: boolean; onPress: () => void }) {
   const { t, lang } = useT();
-  const { fs } = useScale();
+  const { fs, touch } = useScale();
   const nm = names(crop, lang);
   const fit = climateFit(crop);
   return (
     <Pressable
       onPress={onPress}
-      style={[s.row, selected && { borderColor: colors.primary, backgroundColor: colors.primarySoft }]}
+      style={({ pressed }) => [
+        s.row,
+        { minHeight: touch },
+        selected && { borderColor: colors.primary, borderWidth: 2, backgroundColor: colors.primarySoft },
+        pressed && !selected && { borderColor: colors.borderStrong, backgroundColor: colors.surface2 },
+      ]}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={`${nm.primary}, ${crop.daysToHarvest} ${t('common.days')}`}
     >
-      <T style={{ fontSize: fs(26), width: 34, textAlign: 'center' }}>{crop.emoji}</T>
+      <T style={{ fontSize: fs(26), width: 34, textAlign: 'center' }} accessibilityElementsHidden importantForAccessibility="no">{crop.emoji}</T>
       <View style={{ flex: 1 }}>
         <View style={s.rowTop}>
           <T style={{ fontFamily: fonts.uiSemibold, fontSize: fs(15), color: colors.ink }}>{nm.primary}</T>
@@ -67,7 +81,7 @@ function CropRow({ crop, selected, onPress }: { crop: CropRef; selected: boolean
         </View>
       </View>
       <View style={{ alignItems: 'flex-end' }}>
-        <T style={{ fontFamily: fonts.mono, fontSize: fs(15), color: colors.primaryInk }}>{crop.daysToHarvest}</T>
+        <T style={{ fontFamily: fonts.mono, fontSize: fs(15), color: colors.primaryInk, fontVariant: ['tabular-nums'] }}>{crop.daysToHarvest}</T>
         <T variant="muted">{t('common.days')}</T>
       </View>
     </Pressable>
@@ -86,7 +100,7 @@ export function CropPicker({
   onSelect: (crop: CropRef) => void;
 }) {
   const { t, lang } = useT();
-  const { fs } = useScale();
+  const { fs, touch } = useScale();
   const [query, setQuery] = useState('');
   const [cat, setCat] = useState<CropCategory | null>(null);
 
@@ -107,8 +121,8 @@ export function CropPicker({
   return (
     <View style={{ gap: spacing.md, flex: 1 }}>
       {/* search */}
-      <View style={s.search}>
-        <T style={{ fontSize: fs(15) }}>🔍</T>
+      <View style={[s.search, { minHeight: touch }]}>
+        <T style={{ fontSize: fs(15) }} accessibilityElementsHidden importantForAccessibility="no">🔍</T>
         <TextInput
           value={query}
           onChangeText={setQuery}
@@ -117,6 +131,7 @@ export function CropPicker({
           style={[s.input, { fontSize: fs(15) }]}
           autoCapitalize="none"
           autoCorrect={false}
+          accessibilityLabel={t('common.search')}
         />
       </View>
 
@@ -133,9 +148,16 @@ export function CropPicker({
           return (
             <Pressable
               onPress={() => setCat(item)}
-              style={[s.catChip, active && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+              style={({ pressed }) => [
+                s.catChip,
+                active && { backgroundColor: colors.primary, borderColor: colors.primary },
+                pressed && !active && { backgroundColor: colors.surface2 },
+              ]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={label}
             >
-              <T style={{ fontFamily: fonts.uiMedium, fontSize: fs(12), color: active ? '#fff' : colors.muted }}>{label}</T>
+              <T style={{ fontFamily: active ? fonts.uiSemibold : fonts.uiMedium, fontSize: fs(12), color: active ? '#fff' : colors.muted }}>{label}</T>
             </Pressable>
           );
         }}
@@ -143,8 +165,9 @@ export function CropPicker({
 
       {/* list */}
       {loading ? (
-        <View style={{ paddingVertical: spacing.xxl, alignItems: 'center' }}>
+        <View style={{ paddingVertical: spacing.xxl, alignItems: 'center', gap: spacing.sm }}>
           <ActivityIndicator color={colors.primary} />
+          <T variant="muted">{t('common.loading')}</T>
         </View>
       ) : (
         <FlatList
@@ -152,11 +175,7 @@ export function CropPicker({
           keyExtractor={(c) => c.id}
           contentContainerStyle={{ gap: 8, paddingBottom: spacing.lg }}
           keyboardShouldPersistTaps="handled"
-          ListEmptyComponent={
-            <View style={{ paddingVertical: spacing.xl, alignItems: 'center' }}>
-              <T variant="muted">{t('common.error')}</T>
-            </View>
-          }
+          ListEmptyComponent={<EmptyState icon="🔍" tx="assign.noCrops" />}
           renderItem={({ item }) => (
             <CropRow crop={item} selected={item.id === selectedId} onPress={() => onSelect(item)} />
           )}

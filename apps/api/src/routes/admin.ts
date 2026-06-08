@@ -27,6 +27,7 @@ import type {
   FleetResponse,
   GetCustomerResponse,
   ListCustomersResponse,
+  OkResponse,
   OtaResponse,
   RegisterGatewayResponse,
   UpdateCustomerResponse,
@@ -38,6 +39,8 @@ import {
   bindGateway,
   claimDevice,
   createCustomer,
+  deleteCustomer,
+  deleteGateway,
   getCustomer,
   listAllFarms,
   listCustomers,
@@ -191,6 +194,25 @@ adminRouter.patch(
   }),
 );
 
+// Permanently delete a customer + ALL their data (farms, devices, telemetry…).
+adminRouter.delete(
+  '/customers/:id',
+  wrap(async (req, res) => {
+    const id = uuidParam(req, 'id');
+    await deleteCustomer(id);
+    await writeAudit({
+      actorId: req.auth!.userId,
+      accountId: id,
+      action: 'customer.delete',
+      target: `customer:${id}`,
+      before: null,
+      after: null,
+    });
+    const body: OkResponse = { ok: true };
+    res.json(body);
+  }),
+);
+
 // Entitlements editing is ALWAYS allowed (no create-time lock in the 2-role model).
 adminRouter.patch(
   '/customers/:id/entitlements',
@@ -312,6 +334,25 @@ adminRouter.post(
       after: { fwVersion: gateway.fwVersion },
     });
     const body: OtaResponse = { gateway, accepted: true };
+    res.json(body);
+  }),
+);
+
+// Permanently delete a device (+ its tokens + nodes); detaches it from any zones.
+adminRouter.delete(
+  '/gateways/:id',
+  wrap(async (req, res) => {
+    const id = uuidParam(req, 'id');
+    await deleteGateway(id);
+    await writeAudit({
+      actorId: req.auth!.userId,
+      accountId: req.auth!.accountId,
+      action: 'gateway.delete',
+      target: `gateway:${id}`,
+      before: null,
+      after: null,
+    });
+    const body: OkResponse = { ok: true };
     res.json(body);
   }),
 );

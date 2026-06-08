@@ -1,0 +1,118 @@
+/* TERANODE web — cross-tenant analytics styles (unit 5.W4).
+ * Page-local polish only; reuses the shared parchment tokens + tn-* primitives.
+ * Nothing here overrides global component markup. */
+
+/* --- header toolbar ---------------------------------------------------- */
+/* The page filters (farm picker + window + export) live in the PageHeader
+ * actions slot. On narrow screens let them wrap and stretch to full width so
+ * the selects stay usable instead of squeezing. */
+.an-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.an-toolbar .tn-field {
+  min-width: 0;
+}
+.an-toolbar__farm {
+  min-width: 220px;
+}
+.an-toolbar__window {
+  min-width: 150px;
+}
+@media (max-width: 640px) {
+  .an-toolbar {
+    width: 100%;
+  }
+  .an-toolbar__farm,
+  .an-toolbar__window {
+    flex: 1 1 160px;
+  }
+  .an-toolbar .tn-btn {
+    flex: 1 1 100%;
+  }
+}
+
+/* --- savings hero KPI tile -------------------------------------------- */
+/* Mirrors the shared .tn-stat tile but with a soft healthy wash so the
+ * headline savings number reads as the page's primary metric. The dynamic
+ * value color stays inline (data-driven tone). */
+.an-savings {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--healthy-soft), var(--surface) 72%);
+  border-color: var(--healthy);
+}
+.an-savings .tn-stat__value {
+  /* tabular figures so the percentage doesn't jitter while loading */
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- chart cards ------------------------------------------------------- */
+/* Keep a stable frame height so loading/empty placeholders match the
+ * rendered chart and the layout doesn't jump between states. */
+.an-chart {
+  position: relative;
+  width: 100%;
+}
+.an-chart--tall {
+  height: 300px;
+}
+.an-chart--short {
+  height: 280px;
+}
+/* The recharts ResponsiveContainer fills the frame above. */
+.an-chart .recharts-responsive-container {
+  height: 100% !important;
+}
+
+/* Centered loading / empty placeholder that fills the chart frame. */
+.an-chart__state {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-sm);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+.an-chart__state .tn-state__icon {
+  font-size: 26px;
+}
+
+/* --- chart tooltip ----------------------------------------------------- */
+.an-tip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  box-shadow: var(--e2);
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.an-tip__label {
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--ink);
+}
+.an-tip__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.an-tip__swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+.an-tip__val {
+  font-family: var(--font-mono);
+  color: var(--ink);
+}

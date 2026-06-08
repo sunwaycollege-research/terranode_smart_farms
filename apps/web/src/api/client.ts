@@ -30,6 +30,7 @@ import type {
   LoginResponse,
   LogoutResponse,
   MeResponse,
+  OkResponse,
   OtaRequest,
   OtaResponse,
   RefreshResponse,
@@ -266,6 +267,10 @@ export const api = {
       { method: 'PATCH', body },
     );
   },
+  /** Permanently delete a customer + ALL their data (farms, devices, telemetry…). */
+  deleteCustomer(id: string): Promise<OkResponse> {
+    return request<OkResponse>(`/admin/customers/${id}`, { method: 'DELETE' });
+  },
 
   // admin: fleet & gateways ---------------------------------------------------
   getFleet(): Promise<FleetResponse> {
@@ -301,6 +306,10 @@ export const api = {
       method: 'POST',
       body,
     });
+  },
+  /** Permanently delete a device (+ its tokens + nodes); detaches it from zones. */
+  deleteGateway(id: string): Promise<OkResponse> {
+    return request<OkResponse>(`/admin/gateways/${id}`, { method: 'DELETE' });
   },
 
   // admin: audit & catalog ----------------------------------------------------

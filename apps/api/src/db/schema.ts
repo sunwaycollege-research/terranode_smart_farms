@@ -69,6 +69,7 @@ export const channelTypeEnum = pgEnum('channel_type', [
   'humidity',
   'pressure',
   'rain',
+  'flow',
 ]);
 export const alertSevEnum = pgEnum('alert_sev', ['info', 'warn', 'critical']);
 export const actuatorScopeEnum = pgEnum('actuator_scope', ['zone', 'farm']);

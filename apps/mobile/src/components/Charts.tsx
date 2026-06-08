@@ -1,7 +1,7 @@
 import React from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
-import { colors, fonts } from '../theme/tokens';
+import { colors, fonts, radius } from '../theme/tokens';
 import { useScale } from '../theme/scale';
 import { T } from './ui';
 
@@ -41,7 +41,7 @@ export function Sparkline({
   strokeWidth?: number;
 }) {
   if (values.length === 0) {
-    return <View style={{ width, height }} />;
+    return <EmptyPlot width={width} height={height} />;
   }
 
   const pad = strokeWidth + 2;
@@ -103,7 +103,7 @@ export function BarChart({
 }) {
   const { fs } = useScale();
   if (data.length === 0) {
-    return <View style={{ width, height }} />;
+    return <EmptyPlot width={width} height={height} />;
   }
 
   const labelH = showLabels ? 18 : 0;
@@ -120,7 +120,7 @@ export function BarChart({
         {showValues &&
           data.map((d, i) => (
             <View key={`v${i}`} style={{ width: barW, marginRight: i < n - 1 ? gap : 0, alignItems: 'center' }}>
-              <T style={{ fontFamily: fonts.mono, fontSize: fs(9), color: colors.muted }}>{Math.round(d.value)}</T>
+              <T style={{ fontFamily: fonts.mono, fontSize: fs(10), color: colors.inkSoft, fontVariant: ['tabular-nums'] }}>{Math.round(d.value)}</T>
             </View>
           ))}
       </View>
@@ -148,7 +148,7 @@ export function BarChart({
         <View style={{ flexDirection: 'row', height: labelH, marginTop: 2 }}>
           {data.map((d, i) => (
             <View key={`l${i}`} style={{ width: barW, marginRight: i < n - 1 ? gap : 0, alignItems: 'center' }}>
-              <T style={{ fontFamily: fonts.mono, fontSize: fs(9), color: colors.muted }} numberOfLines={1}>
+              <T style={{ fontFamily: fonts.mono, fontSize: fs(10), color: colors.muted, fontVariant: ['tabular-nums'] }} numberOfLines={1}>
                 {d.label}
               </T>
             </View>
@@ -156,10 +156,40 @@ export function BarChart({
         </View>
       )}
       {unit !== '' && (
-        <T variant="muted" style={{ marginTop: 2, alignSelf: 'flex-end', fontSize: fs(10) }}>
+        <T variant="muted" style={{ marginTop: 2, alignSelf: 'flex-end', fontSize: fs(10), fontVariant: ['tabular-nums'] }}>
           {unit} · max {Math.round(max)}
         </T>
       )}
     </View>
   );
 }
+
+// ---------------------------------------------------------------------------
+// EmptyPlot — a quiet dashed placeholder so an empty chart still holds its
+// layout slot and reads as "no data yet" rather than collapsing to nothing.
+// ---------------------------------------------------------------------------
+function EmptyPlot({ width, height }: { width: number; height: number }) {
+  return (
+    <View
+      style={[plot.empty, { width, height }]}
+      accessibilityRole="image"
+      accessibilityLabel="No data yet"
+    >
+      <T variant="muted" style={{ fontSize: 11 }}>
+        — no data yet —
+      </T>
+    </View>
+  );
+}
+
+const plot = StyleSheet.create({
+  empty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    borderStyle: 'dashed',
+    borderRadius: radius.r2,
+    backgroundColor: colors.surface2,
+  },
+});

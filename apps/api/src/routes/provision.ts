@@ -37,6 +37,7 @@ const channelType = z.enum([
   'humidity',
   'pressure',
   'rain',
+  'flow',
 ]);
 
 const provisionSchema = z.object({

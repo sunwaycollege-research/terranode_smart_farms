@@ -33,6 +33,12 @@ interface ScaleState {
   fs: (size: number) => number;
   /** Scale a spacing value. */
   sp: (value: number) => number;
+  /**
+   * Scale a line-height. Defaults to a comfortable 1.4× of the (already scaled)
+   * font size for legibility, but a fixed value can be passed too. Keeping this
+   * in one place means multi-line copy stays readable in field mode.
+   */
+  lh: (fontSizeOrLineHeight: number, isLineHeight?: boolean) => number;
   /** A scaled minimum touch target height. */
   touch: number;
 }
@@ -81,6 +87,7 @@ export function FieldModeProvider({ children }: { children: React.ReactNode }) {
       toggleFieldMode: () => setFieldMode(!fieldMode),
       fs: (size: number) => Math.round(size * scale),
       sp: (v: number) => Math.round(v * scale),
+      lh: (v: number, isLineHeight = false) => Math.round((isLineHeight ? v : v * 1.4) * scale),
       touch: Math.round(BASE_TOUCH * scale),
     };
   }, [fieldMode, setFieldMode]);
@@ -100,6 +107,7 @@ export function useScale(): ScaleState {
     toggleFieldMode: async () => {},
     fs: (s: number) => s,
     sp: (v: number) => v,
+    lh: (v: number, isLineHeight = false) => Math.round(isLineHeight ? v : v * 1.4),
     touch: BASE_TOUCH,
   };
 }

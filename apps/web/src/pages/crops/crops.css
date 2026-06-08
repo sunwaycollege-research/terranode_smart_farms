@@ -8,10 +8,55 @@
   flex-wrap: wrap;
   margin-bottom: var(--sp-lg);
 }
-.cr-search {
+/* When the toolbar lives inside the card header it provides its own spacing. */
+.cr-toolbar--flush {
+  margin-bottom: 0;
+  justify-content: flex-end;
   flex: 1;
-  min-width: 200px;
-  max-width: 320px;
+  min-width: 0;
+}
+.cr-search {
+  position: relative;
+  flex: 1;
+  min-width: 180px;
+  max-width: 300px;
+}
+.cr-search__icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 13px;
+  line-height: 1;
+  pointer-events: none;
+  opacity: 0.65;
+}
+/* Make room for the leading glyph and the trailing clear button. */
+.cr-search__input.tn-input {
+  padding-left: 32px;
+  padding-right: 30px;
+}
+.cr-search__clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  border-radius: var(--r1);
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.cr-search__clear:hover {
+  background: var(--surface-2);
+  color: var(--ink-soft);
 }
 .cr-chips {
   display: flex;
@@ -87,9 +132,22 @@
   font-family: var(--font-mono);
   color: var(--ink-soft);
 }
+.cr-harvest {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 4px;
+  white-space: nowrap;
+}
 .cr-d2h {
   font-family: var(--font-mono);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.cr-harvest__unit {
+  font-size: 12px;
+  color: var(--muted);
 }
 
 /* --- drawer ------------------------------------------------------------ */
@@ -151,10 +209,18 @@
   display: flex;
   align-items: center;
   gap: var(--sp-sm);
-  margin-top: 6px;
+  margin-top: 8px;
   flex-wrap: wrap;
   color: var(--muted);
   font-size: 13px;
+}
+/* Render the crop id as a subtle code chip. */
+.cr-drawer__sub .mono {
+  padding: 2px 7px;
+  border-radius: var(--r1);
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  font-size: 12px;
 }
 .cr-drawer__body {
   flex: 1;
@@ -190,13 +256,15 @@
 
 /* --- tabs -------------------------------------------------------------- */
 .cr-tabs {
-  display: flex;
+  display: inline-flex;
   gap: 2px;
   padding: 3px;
   background: var(--surface-2);
   border: 1px solid var(--border-soft);
   border-radius: var(--pill);
   align-self: flex-start;
+  max-width: 100%;
+  overflow-x: auto;
 }
 .cr-tabs button {
   border: none;
@@ -207,6 +275,15 @@
   font-weight: 600;
   color: var(--muted);
   cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.cr-tabs button:hover:not(.is-active):not(:disabled) {
+  color: var(--ink-soft);
+}
+.cr-tabs button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .cr-tabs button.is-active {
   background: var(--surface);
@@ -221,11 +298,33 @@
   gap: var(--sp-md);
 }
 
+/* --- labeled section (wraps a band editor with a heading + hint) -------- */
+.cr-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-sm);
+}
+.cr-section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-md);
+  flex-wrap: wrap;
+}
+/* The section heading reuses the subhead treatment; clear its own margin. */
+.cr-section__head .cr-subhead {
+  margin-bottom: 0;
+}
+.cr-section__head .cr-hint {
+  text-align: right;
+}
+
 /* --- band editor ------------------------------------------------------- */
 .cr-band {
   border: 1px solid var(--border-soft);
   border-radius: var(--r2);
   overflow: hidden;
+  background: var(--surface);
 }
 .cr-band__head {
   display: grid;
@@ -239,9 +338,11 @@
   letter-spacing: 0.04em;
   color: var(--muted);
 }
+/* Align the Low / High headings over the right-aligned numeric inputs. */
 .cr-band__head span:nth-child(2),
 .cr-band__head span:nth-child(3) {
-  text-align: center;
+  text-align: right;
+  padding-right: 8px;
 }
 .cr-band__row {
   display: grid;
@@ -250,9 +351,17 @@
   align-items: center;
   padding: 7px var(--sp-md);
   border-top: 1px solid var(--border-soft);
+  transition: background 0.12s ease;
 }
 .cr-band__row:nth-child(even) {
   background: rgba(240, 236, 223, 0.4);
+}
+.cr-band__row:hover {
+  background: var(--surface-2);
+}
+/* Highlight the channel being edited for clearer scanning. */
+.cr-band__row:focus-within {
+  background: var(--primary-soft);
 }
 .cr-band__ch {
   display: flex;
@@ -304,14 +413,29 @@
   border-radius: var(--r3);
   background: var(--surface);
   overflow: hidden;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+.cr-stage.is-open {
+  border-color: var(--border);
+  box-shadow: var(--e1);
+}
+.cr-stage.is-open .cr-stage__head {
+  background: var(--surface-2);
 }
 .cr-stage__head {
   display: flex;
+  width: 100%;
   align-items: center;
   gap: var(--sp-md);
   padding: var(--sp-md) var(--sp-lg);
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
   cursor: pointer;
   user-select: none;
+  transition: background 0.14s ease;
 }
 .cr-stage__head:hover {
   background: var(--surface-2);
@@ -361,6 +485,127 @@
   text-align: center;
 }
 
+/* --- fertilizer schedule (research-backed reference) ------------------- */
+.cr-fert-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-sm);
+  padding: var(--sp-md) var(--sp-lg);
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid var(--warn, var(--primary));
+  border-radius: var(--r2);
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.cr-fert-note__icon {
+  flex: none;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--warn, var(--primary));
+}
+.cr-fert {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cr-fert__item {
+  display: flex;
+  gap: var(--sp-md);
+  align-items: stretch;
+}
+.cr-fert__rail {
+  position: relative;
+  flex: none;
+  width: 14px;
+  display: flex;
+  justify-content: center;
+}
+.cr-fert__rail::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border-soft);
+}
+.cr-fert__item:first-child .cr-fert__rail::before {
+  top: 20px;
+}
+.cr-fert__item:last-child .cr-fert__rail::before {
+  bottom: calc(100% - 20px);
+}
+.cr-fert__dot {
+  position: relative;
+  z-index: 1;
+  /* Align the node with the first text line in the card head. */
+  margin-top: 15px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--primary);
+  box-shadow: 0 0 0 3px var(--bg);
+  flex: none;
+}
+.cr-fert__card {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: var(--sp-md);
+  padding: var(--sp-md) var(--sp-lg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r3);
+  background: var(--surface);
+}
+.cr-fert__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-sm);
+}
+.cr-fert__stage {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.cr-fert__title {
+  font-weight: 600;
+  color: var(--ink);
+}
+.cr-fert__src {
+  flex: none;
+}
+.cr-fert__row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: var(--sp-sm);
+  align-items: baseline;
+  padding: 4px 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.cr-fert__row--organic {
+  border-top: 1px solid var(--border-soft);
+  margin-top: 2px;
+  padding-top: 8px;
+}
+.cr-fert__k {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.cr-fert__v {
+  color: var(--ink-soft);
+}
+
 /* --- misc -------------------------------------------------------------- */
 .cr-formerror {
   color: var(--critical);
@@ -374,4 +619,43 @@
 .cr-emoji-input .tn-input {
   text-align: center;
   font-size: 18px;
+}
+
+/* --- responsive -------------------------------------------------------- */
+@media (max-width: 720px) {
+  /* On phones the search field shouldn't be capped so narrowly. */
+  .cr-search {
+    max-width: none;
+    flex-basis: 100%;
+  }
+  .cr-toolbar--flush {
+    justify-content: stretch;
+  }
+}
+
+@media (max-width: 520px) {
+  .cr-drawer__head,
+  .cr-drawer__body {
+    padding: var(--sp-lg);
+  }
+  .cr-drawer__foot {
+    padding: var(--sp-md) var(--sp-lg);
+    flex-wrap: wrap;
+  }
+  /* Let the footer hint drop to its own line above the buttons. */
+  .cr-drawer__foot .cr-hint {
+    flex-basis: 100%;
+    order: -1;
+  }
+  .cr-drawer__title {
+    font-size: 22px;
+  }
+  /* Keep the low/high pair readable: shrink the channel label column. */
+  .cr-band__head,
+  .cr-band__row {
+    grid-template-columns: 1.1fr 1fr 1fr;
+  }
+  .cr-fert__row {
+    grid-template-columns: 56px 1fr;
+  }
 }

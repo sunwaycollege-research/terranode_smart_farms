@@ -54,12 +54,13 @@ const ZONE_CHANNELS: { type: string; unit: string }[] = [
   { type: 'soiltemp', unit: '°C' },
 ];
 
-/** Farm-level weather-mast channels. */
+/** Farm-level weather-mast + flow channels. */
 const FARM_WEATHER_CHANNELS: { type: string; unit: string }[] = [
   { type: 'airtemp', unit: '°C' },
   { type: 'humidity', unit: '%' },
   { type: 'pressure', unit: 'hPa' },
   { type: 'rain', unit: 'mm' },
+  { type: 'flow', unit: 'L/min' }, // YF-S201 flow meter — leak detection + usage
 ];
 
 // --- reference data (idempotent upserts) -------------------------------------

@@ -53,6 +53,8 @@ function buildTelemetryPayload(z: ZoneSimState, pump: boolean, ts: string) {
   const ph = round1(z.ph);
   const ec = round2(z.ec);
   const soilTemp = round1(z.soilTemp);
+  // YF-S201 flow meter: ~water flows only while the valve is open (farm channel).
+  const flow = z.valve ? round1(10.5 + (z.moisture % 4)) : 0;
   return {
     ts,
     zoneId: z.zoneId,
@@ -65,6 +67,7 @@ function buildTelemetryPayload(z: ZoneSimState, pump: boolean, ts: string) {
       { channel: 'p', value: z.p, quality: 1 },
       { channel: 'k', value: z.k, quality: 1 },
       { channel: 'soiltemp', value: soilTemp, quality: 1 },
+      { channel: 'flow', value: flow, quality: 1 },
     ],
     // flat convenience fields (per task contract) -------------------------
     moisture,
@@ -74,6 +77,7 @@ function buildTelemetryPayload(z: ZoneSimState, pump: boolean, ts: string) {
     p: z.p,
     k: z.k,
     soilTemp,
+    flow,
     valve: z.valve,
     pump,
     dosing: false,

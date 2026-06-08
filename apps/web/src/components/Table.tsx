@@ -56,6 +56,18 @@ export function Table<Row>({
                 key={rowKey(row, ri)}
                 className={onRowClick ? 'tn-table__row--clickable' : undefined}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+                role={onRowClick ? 'button' : undefined}
+                onKeyDown={
+                  onRowClick
+                    ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onRowClick(row);
+                        }
+                      }
+                    : undefined
+                }
               >
                 {columns.map((c, ci) => (
                   <td key={ci} style={{ textAlign: c.align ?? 'left' }}>

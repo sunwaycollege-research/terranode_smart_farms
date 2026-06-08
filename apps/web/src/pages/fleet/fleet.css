@@ -1,0 +1,241 @@
+/* TERANODE web — fleet-health admin styles (unit 5.W2).
+ * Page-local, additive only. Reuses the parchment tokens + tn-* primitives;
+ * the global stylesheet (theme/global.css) is owned by the design-system agent. */
+
+/* --- summary tiles (clickable → drive the status filter) --------------- */
+/* Wraps the shared <Stat> tile in a button; we restyle the wrapper, not the
+ * tile internals, so the KPI typography stays identical to every other page. */
+.fl-tile {
+  all: unset;
+  display: block;
+  cursor: pointer;
+  border-radius: var(--r3);
+  outline: 1px solid transparent;
+  outline-offset: 2px;
+  transition: outline-color 0.14s ease, transform 0.05s ease;
+}
+.fl-tile:hover .tn-stat {
+  border-color: var(--border-strong);
+  box-shadow: var(--e2);
+}
+.fl-tile:active {
+  transform: translateY(1px);
+}
+/* Keyboard ring (the wrapper carries focus, not the inner tile). */
+.fl-tile:focus-visible {
+  outline: 2px solid var(--primary);
+}
+/* Selected bucket: terracotta accent ring + tinted tile, so the active KPI
+ * reads as "this is the current filter" at a glance. */
+.fl-tile.is-active {
+  outline: 2px solid var(--accent);
+}
+.fl-tile.is-active .tn-stat {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.fl-tile.is-active .tn-stat__value {
+  color: var(--accent);
+}
+
+/* --- fleet card toolbar (filter chips + result count) ------------------ */
+.fl-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-md) var(--sp-lg);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.fl-filters {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs);
+  flex-wrap: wrap;
+}
+.fl-count {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* --- shared small muted text (intro copy, secondary cell text) --------- */
+/* Replaces repeated inline style={{ fontSize: 13 }} so size stays uniform. */
+.fl-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.fl-muted-sm {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* --- table cells (replace ad-hoc inline flex columns) ------------------ */
+.fl-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.3;
+  min-width: 0;
+}
+.fl-cell__primary {
+  font-weight: 600;
+  color: var(--ink);
+}
+.fl-cell__secondary {
+  font-size: 12px;
+  color: var(--muted);
+}
+/* Serial / firmware: monospace + tabular so columns line up vertically. */
+.fl-serial {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--ink);
+}
+.fl-meta {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.fl-fw {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+}
+
+/* --- battery cell ------------------------------------------------------- */
+.fl-battery {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+.fl-battery__pct {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.fl-battery__nodes {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* --- row actions -------------------------------------------------------- */
+.fl-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-sm);
+  flex-wrap: nowrap;
+}
+
+/* --- token reveal: monospace one-time secret box ----------------------- */
+.fl-token {
+  padding: var(--sp-md) var(--sp-lg);
+  border-radius: var(--r2);
+  border: 1px dashed var(--border-strong);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-all;
+  color: var(--ink);
+  user-select: all;
+}
+.fl-token-serial {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-sm);
+}
+.fl-token-serial code {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* --- modal (centered, on the Card primitive) --------------------------- */
+.fl-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-xl);
+  background: rgba(26, 25, 22, 0.42);
+  backdrop-filter: blur(2px);
+  animation: fl-fade 0.16s ease;
+  overflow-y: auto;
+}
+@keyframes fl-fade {
+  from {
+    opacity: 0;
+  }
+}
+.fl-modal {
+  width: 100%;
+  animation: fl-rise 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@keyframes fl-rise {
+  from {
+    transform: translateY(10px);
+    opacity: 0.5;
+  }
+}
+/* Close (✕) affordance in the card header — square, quiet, hit-area sized. */
+.fl-close {
+  all: unset;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r2);
+  font-size: 16px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.fl-close:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.fl-close:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* --- loading skeleton rows (in place of bare "Loading…") --------------- */
+.fl-skel-table {
+  padding: var(--sp-md) 0;
+}
+.fl-skel-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 2fr 1fr 1fr;
+  gap: var(--sp-lg);
+  align-items: center;
+  padding: 13px var(--sp-xl);
+  border-bottom: 1px solid var(--border-soft);
+}
+.fl-skel-row:last-child {
+  border-bottom: none;
+}
+
+/* --- responsive: keep actions usable, soften density on small screens -- */
+@media (max-width: 640px) {
+  .fl-toolbar {
+    justify-content: flex-start;
+  }
+  .fl-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .fl-skel-row {
+    grid-template-columns: 2fr 1fr 1fr;
+  }
+  .fl-skel-row span:nth-child(n + 4) {
+    display: none;
+  }
+}

@@ -66,6 +66,27 @@ export const ne: Record<TranslationKey, string> = {
   'field.flow': 'बहाव',
   'field.watering': 'सिँचाइ हुँदै',
   'field.idle': 'निष्क्रिय',
+  'field.gateway': 'ESP32 गेटवे',
+  'field.gatewayOnline': 'गेटवे अनलाइन',
+  'field.gatewayOffline': 'गेटवे अफलाइन',
+  'field.gatewayClaimed': 'गेटवे लिङ्क भयो · पहिलो बुटको पर्खाइमा',
+  'field.gatewayNone': 'गेटवे छैन',
+  'field.offlineCached': 'अफलाइन · क्यास',
+  'field.offlineNotice':
+    'अन्तिम क्यास गरिएको खेत झलक देखाइँदै। गेटवेमा सिँचाइ चलिरहन्छ; पुनः जडान हुँदा रिडिङ ताजा हुन्छ।',
+  'field.noFarmTitle': 'अहिलेसम्म कुनै खेत सेटअप छैन',
+  'field.noFarmBody':
+    'तपाईंको यन्त्र दर्ता भई सञ्चालन भएपछि यन्त्र र प्रत्यक्ष रिडिङहरू यहाँ देखिनेछन्।',
+  'field.loadError': 'तपाईंको खेत लोड गर्न सकिएन। जडान जाँच गरी पुनः प्रयास गर्नुहोस्।',
+  'field.zonesHint': 'रिडिङ, लक्ष्य र भल्भ हेर्न कुनै क्षेत्रमा ट्याप गर्नुहोस्।',
+
+  // water status -------------------------------------------------------------
+  'water.title': 'पानी',
+  'water.flowing': 'पानी बगिरहेको छ: {{lpm}} लि./मिनेट',
+  'water.flowingHint': 'तपाईंको बालीमा अहिले सिँचाइ हुँदैछ।',
+  'water.none': 'अहिले सिँचाइ भइरहेको छैन',
+  'water.leak': 'पम्प चलिरहेको छ तर पानी बगिरहेको छैन — पम्प वा पाइप जाँच गर्नुहोस्।',
+  'water.rain': 'वर्षा भइरहेको छ — पानी बचाउन सिँचाइ रोकियो।',
 
   // zone detail --------------------------------------------------------------
   'zone.moisture': 'चिस्यान',
@@ -77,6 +98,7 @@ export const ne: Record<TranslationKey, string> = {
   'zone.soilTemp': 'माटोको तापक्रम',
   'zone.airTemp': 'हावाको तापक्रम',
   'zone.target': 'लक्ष्य',
+  'zone.status': 'माटोको अवस्था',
   'zone.valve': 'भल्भ',
   'zone.mode': 'मोड',
   'zone.coach': 'सल्लाह',
@@ -86,6 +108,42 @@ export const ne: Record<TranslationKey, string> = {
   'zone.in': 'दायरामा',
   'zone.above': 'बढी',
   'zone.pending': 'पर्खँदै…',
+  'zone.notFound': 'क्षेत्र भेटिएन। यो हटाइएको हुन सक्छ।',
+  'zone.loadError': 'यो क्षेत्र लोड गर्न सकिएन।',
+  'zone.needsCropTitle': 'यस क्षेत्रका लागि बाली छान्नुहोस्',
+  'zone.needsCropBody': 'यस क्षेत्रमा अहिलेसम्म बाली छैन। तपाईं के उमार्दै हुनुहुन्छ छान्नुहोस् ताकि TERANODE ले सही लक्ष्य सेट गरी स्वास्थ्य ट्र्याक गर्न सकोस्।',
+  'zone.assignCrop': 'बाली छान्नुहोस्',
+  'zone.valveHint':
+    'ग्याटवेले नियन्त्रण लूप स्थानीय रूपमा चलाउँछ। ओभरराइड गर्न म्यानुअलमा बदल्नुहोस् — एपले तपाईंको अनुरोध मात्र होइन, उपकरणको रिपोर्ट गरिएको अवस्था देखाउँछ।',
+  'zone.noValve': 'यस क्षेत्रमा अहिलेसम्म कुनै भल्भ जोडिएको छैन।',
+
+  // soil nutrients card ------------------------------------------------------
+  'nutrient.title': 'माटोको पोषक तत्व',
+  'nutrient.subtitle': 'अहिले तपाईंको माटोलाई के चाहिन्छ।',
+  'nutrient.empty': 'अहिलेसम्म माटोको रिडिङ छैन — तपाईंको प्रोबले रिपोर्ट गरेपछि मानहरू देखिनेछन्।',
+  'nutrient.approx': 'N · P · K माटो प्रोबबाट अनुमानित मानहरू हुन् — मार्गदर्शनका लागि प्रयोग गर्नुहोस्; धेरै मल हाल्नुअघि प्रयोगशाला परीक्षणले पुष्टि गर्नुहोस्।',
+  'fertilizer.title': 'मल योजना',
+  'nutrient.low': 'कम',
+  'nutrient.ok': 'ठीक',
+  'nutrient.high': 'धेरै',
+  'nutrient.unit.npk': 'mg/kg',
+  'nutrient.unit.ec': 'mS/cm',
+  // plain one-line hints (no jargon)
+  'nutrient.n.low': 'नाइट्रोजन कम — कम्पोस्ट वा युरिया हाल्नुहोस्।',
+  'nutrient.n.ok': 'नाइट्रोजन ठीक छ।',
+  'nutrient.n.high': 'नाइट्रोजन धेरै — नाइट्रोजन मल नहाल्नुहोस्।',
+  'nutrient.p.low': 'फस्फोरस कम — हड्डीको धूलो वा DAP हाल्नुहोस्।',
+  'nutrient.p.ok': 'फस्फोरस ठीक छ।',
+  'nutrient.p.high': 'फस्फोरस धेरै — फस्फेट मल नहाल्नुहोस्।',
+  'nutrient.k.low': 'पोटासियम कम — खरानी वा पोटास हाल्नुहोस्।',
+  'nutrient.k.ok': 'पोटासियम ठीक छ।',
+  'nutrient.k.high': 'पोटासियम धेरै — पोटास मल नहाल्नुहोस्।',
+  'nutrient.ph.low': 'माटो अम्लीय छ — चुन हाल्नुहोस्।',
+  'nutrient.ph.ok': 'पिएच ठीक छ।',
+  'nutrient.ph.high': 'माटो क्षारीय छ — कम्पोस्ट वा गन्धक हाल्नुहोस्।',
+  'nutrient.ec.low': 'माटोमा मल कम छ — मल हाल्नुहोस्।',
+  'nutrient.ec.ok': 'नुनको मात्रा ठीक छ।',
+  'nutrient.ec.high': 'नुन धेरै भयो — सफा पानीले पखाल्नुहोस्।',
 
   // add / assign zone --------------------------------------------------------
   'assign.title': 'क्षेत्र थप्नुहोस्',
@@ -97,6 +155,12 @@ export const ne: Record<TranslationKey, string> = {
   'assign.climateFit': 'हावापानी उपयुक्तता',
   'assign.create': 'क्षेत्र सिर्जना',
   'assign.zoneName': 'क्षेत्रको नाम',
+  'assign.quota': '{{used}}/{{cap}} सेन्सर नोड प्रयोगमा',
+  'assign.atCapTitle': 'तपाईंका सबै नोड प्रयोगमा छन्',
+  'assign.atCapBody':
+    'तपाईंले {{cap}} मध्ये {{used}} क्षेत्र सेटअप गर्नुभयो — प्रत्येक किनेको सेन्सर नोडका लागि एक। थप क्षेत्रका लागि अर्को नोड किट थप्नुहोस्।',
+  'assign.noFarmBody': 'तपाईंको खातामा अहिलेसम्म फार्म सेटअप भएको छैन।',
+  'assign.noCrops': 'कुनै बाली भेटिएन। रिफ्रेस गर्नुहोस् वा कनेक्सन जाँच्नुहोस्।',
 
   // crop categories ----------------------------------------------------------
   'cat.fruiting': 'फलफूल',
@@ -124,10 +188,17 @@ export const ne: Record<TranslationKey, string> = {
   'analytics.export': 'CSV निर्यात',
   'analytics.share': 'सेयर',
   'analytics.noData': 'यो अवधिको लागि अहिलेसम्म डाटा छैन।',
+  'analytics.noUsage': 'अहिलेसम्म खपत डाटा छैन।',
+  'analytics.noFarm': 'अहिलेसम्म कुनै फार्म सेटअप गरिएको छैन — तपाईंको फार्म र क्षेत्रहरू कन्फिगर भएपछि, खपत र बचत यहाँ देखिनेछ।',
 
   // history ------------------------------------------------------------------
   'history.title': 'इतिहास',
   'history.range': 'अवधि',
+  'history.subtitle': 'सेन्सर रोलअप — प्रत्येक बकेटको औसत र न्यूनतम/अधिकतम दायरा।',
+  'history.noFarm': 'अहिलेसम्म कुनै फार्म सेटअप गरिएको छैन — तपाईंको फार्म र क्षेत्रहरू कन्फिगर भएपछि, सेन्सर इतिहास यहाँ देखिनेछ।',
+  'history.empty': 'अहिलेसम्म इतिहास छैन — तपाईंको उपकरणले रिपोर्ट गर्दै जाँदा रिडिङहरू देखिनेछन्।',
+  'history.error': 'इतिहास लोड गर्न सकिएन।',
+  'history.channel': 'च्यानल',
 
   // alerts -------------------------------------------------------------------
   'alerts.title': 'सूचना',
@@ -137,6 +208,8 @@ export const ne: Record<TranslationKey, string> = {
   'alerts.info': 'जानकारी',
   'alerts.warn': 'चेतावनी',
   'alerts.critical': 'गम्भीर',
+  'alerts.error': 'सूचनाहरू लोड गर्न सकिएन।',
+  'alerts.pushNote': 'पुश सूचनाहरू पनि यहीँ आउँछन्।',
 
   // account ------------------------------------------------------------------
   'account.title': 'खाता',
@@ -146,4 +219,37 @@ export const ne: Record<TranslationKey, string> = {
   'account.fieldModeHint': 'खेतमा प्रयोगका लागि ठूलो अक्षर र टच लक्ष्य।',
   'account.english': 'English',
   'account.nepali': 'नेपाली',
+  'account.roleAdmin': 'एड्मिनिस्ट्रेटर',
+  'account.roleCustomer': 'किसान',
+  'account.devicesLoading': 'तपाईंको योजना लोड हुँदै…',
+  'account.devicesError': 'योजना र उपकरण लोड गर्न सकिएन।',
+  'account.devicesEmpty': 'तपाईंको योजनामा अहिलेसम्म कुनै उपकरण छैन।',
+  'account.addDevice': '+ उपकरण थप्नुहोस्',
+
+  // device onboarding --------------------------------------------------------
+  'onboard.title': 'उपकरण थप्नुहोस्',
+  'onboard.step': '{{total}} मध्ये चरण {{step}}',
+
+  // step 1 — power on
+  'onboard.step1Title': 'आफ्नो TERANODE बाकस सुरु गर्नुहोस्',
+  'onboard.step1Body': 'TERANODE बाकस प्लग गर्नुहोस्। बत्ती बलेर स्थिर नभएसम्म पर्खनुहोस्।',
+  'onboard.step1Hint': 'यसमा एक मिनेटसम्म लाग्न सक्छ।',
+
+  // step 2 — wifi setup
+  'onboard.step2Title': 'बाकससँग जडान गर्नुहोस्',
+  'onboard.step2Body': 'फोनको WiFi सेटिङ खोल्नुहोस् र TERANODE-XXXX नामको नेटवर्कमा जडान गर्नुहोस्।',
+  'onboard.step2Body2': 'एउटा सेटअप पृष्ठ खुल्नेछ। आफ्नो घरको WiFi छान्नुहोस् र त्यसको पासवर्ड टाइप गर्नुहोस्।',
+  'onboard.step2Hint': 'त्यसपछि यहाँ फर्केर अर्को थिच्नुहोस्।',
+  'onboard.openWifi': 'WiFi सेटिङ खोल्नुहोस्',
+
+  // step 3 — waiting / connected
+  'onboard.waitingTitle': 'तपाईंको उपकरण पर्खँदै…',
+  'onboard.waitingBody': 'बाकस चालू राख्नुहोस्। यो पृष्ठ आफैं अपडेट हुन्छ।',
+  'onboard.connectedTitle': 'तपाईंको उपकरण जडान भयो!',
+  'onboard.connectedBody': 'तपाईंको TERANODE बाकस अनलाइन भई रिडिङ पठाउँदैछ।',
+  'onboard.goDashboard': 'मेरो खेतमा जानुहोस्',
+  'onboard.tryAgain': 'फेरि जाँच गर्नुहोस्',
+
+  // step nav
+  'onboard.start': 'सुरु गर्नुहोस्',
 };

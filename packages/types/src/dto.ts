@@ -487,6 +487,22 @@ export interface TelemetryResponse {
   buckets?: TelemetryBucket[];
 }
 
+/** The latest value for one sensor channel on a farm (zone- or farm-level). */
+export interface FarmReading {
+  channelId: UUID;
+  type: ChannelType;
+  zoneId: UUID | null; // null = farm-level channel (weather mast / flow meter)
+  unit: string | null;
+  value: number;
+  ts: string;
+}
+
+/** GET /farms/:id/readings — newest reading per channel across the whole farm. */
+export interface FarmReadingsResponse {
+  farmId: UUID;
+  readings: FarmReading[];
+}
+
 // --- rules, schedules, dosing -------------------------------------------------
 
 /** GET /zones/:id/rules */

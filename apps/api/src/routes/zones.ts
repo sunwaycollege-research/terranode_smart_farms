@@ -14,6 +14,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type {
+  ActuatorCommandResponse,
   AssignZoneResponse,
   CreateZoneResponse,
   DeleteZoneResponse,
@@ -21,6 +22,7 @@ import type {
   TelemetryResponse,
   UpdateZoneResponse,
   ZoneAnalysisResponse,
+  ZoneWithCrop,
 } from '@teranode/types';
 import { CHANNEL_TYPES, CONTROL_MODES } from '@teranode/types';
 import { requireAuth, scopeToCustomer, type RequestScope } from '../middleware/auth';
@@ -33,6 +35,8 @@ import {
   getZoneTelemetry,
   updateZone,
 } from '../services/zones';
+import { getZoneWithCrop } from '../services/farms';
+import { commandZoneValve } from '../services/control';
 
 export const zonesRouter = Router();
 
@@ -88,6 +92,32 @@ const assignZoneSchema = z.object({
 });
 
 const VALID_AGG: readonly TelemetryAgg[] = ['raw', '5m', '1h', '1d'];
+
+const valveSchema = z.object({ open: z.boolean() });
+
+// --- GET /zones/:id ----------------------------------------------------------
+
+zonesRouter.get(
+  '/:id',
+  wrap(async (req, res) => {
+    const zone = await getZoneWithCrop(scopeOf(req), req.params.id);
+    const body: ZoneWithCrop = zone;
+    res.json(body);
+  }),
+);
+
+// --- POST /zones/:id/valve ---------------------------------------------------
+
+zonesRouter.post(
+  '/:id/valve',
+  wrap(async (req, res) => {
+    const parsed = valveSchema.safeParse(req.body ?? {});
+    if (!parsed.success) throw new HttpError(400, 'open (boolean) is required');
+    const result = await commandZoneValve(req.params.id, parsed.data.open, scopeOf(req));
+    const body: ActuatorCommandResponse = result;
+    res.json(body);
+  }),
+);
 
 // --- POST /zones -------------------------------------------------------------
 

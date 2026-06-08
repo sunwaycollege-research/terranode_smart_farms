@@ -14,8 +14,11 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type {
+  Actuator,
   CreateFarmResponse,
   DeleteFarmResponse,
+  FarmReadingsResponse,
+  Gateway,
   GetFarmResponse,
   ListFarmsResponse,
   ListZonesResponse,
@@ -27,10 +30,13 @@ import {
   createFarm,
   deleteFarm,
   getFarm,
+  getFarmGateway,
+  getFarmReadings,
   listFarmZones,
   listFarms,
   updateFarm,
 } from '../services/farms';
+import { listFarmActuators } from '../services/control';
 
 export const farmsRouter = Router();
 
@@ -138,6 +144,39 @@ farmsRouter.get(
   wrap(async (req, res) => {
     const zones = await listFarmZones(scopeOf(req), req.params.id);
     const body: ListZonesResponse = { zones };
+    res.json(body);
+  }),
+);
+
+// --- GET /farms/:id/actuators ------------------------------------------------
+
+farmsRouter.get(
+  '/:id/actuators',
+  wrap(async (req, res) => {
+    const actuators = await listFarmActuators(req.params.id, scopeOf(req));
+    const body: Actuator[] = actuators;
+    res.json(body);
+  }),
+);
+
+// --- GET /farms/:id/gateway --------------------------------------------------
+
+farmsRouter.get(
+  '/:id/gateway',
+  wrap(async (req, res) => {
+    const gateway = await getFarmGateway(scopeOf(req), req.params.id);
+    const body: Gateway | null = gateway;
+    res.json(body);
+  }),
+);
+
+// --- GET /farms/:id/readings -------------------------------------------------
+
+farmsRouter.get(
+  '/:id/readings',
+  wrap(async (req, res) => {
+    const readings = await getFarmReadings(scopeOf(req), req.params.id);
+    const body: FarmReadingsResponse = { farmId: req.params.id, readings };
     res.json(body);
   }),
 );

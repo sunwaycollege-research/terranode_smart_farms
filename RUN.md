@@ -90,3 +90,8 @@ firmware/  ESP32 Wokwi sketch    simulator/  HTML digital twin    docs/  plannin
 ```
 Build orchestration scripts used to generate this product live at the repo root
 (`teranode-*.workflow.js`) and `docs/BUILD-SPEC.md` is the authoritative spec.
+
+
+TOKEN=$(curl -s -X POST localhost:4000/auth/login -H 'content-type: application/json' \
+    -d '{"email":"admin@teranode.io","password":"teranode"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['accessToken'])"); \
+  curl -s localhost:4000/admin/farms -H "authorization: Bearer $TOKEN" | python3 -m

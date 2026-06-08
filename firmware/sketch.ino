@@ -1,3 +1,11 @@
+/**
+ * @file sketch.ino
+ * @brief TERANODE base ESP32 edge template (Wokwi-runnable).
+ *
+ * The minimal sensor + WiFi/MQTT template the connected gateway
+ * (teranode_gateway.ino) builds on. Runs on Wokwi with the bundled
+ * diagram.json. See docs: components/firmware.
+ */
 /* =====================================================================
    TERANODE — IoT edge simulation (ESP32 gateway/zone node)
    Runs on Wokwi: https://wokwi.com  (paste diagram.json + this sketch)

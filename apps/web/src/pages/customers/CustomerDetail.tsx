@@ -53,6 +53,7 @@ export function CustomerDetail() {
   const [savingEnt, setSavingEnt] = useState(false);
   const [togglingStatus, setTogglingStatus] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeTone, setNoticeTone] = useState<'ok' | 'warn'>('ok');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -126,8 +127,10 @@ export function CustomerDetail() {
         locale,
       });
       setData({ ...data, account: updated });
+      setNoticeTone('ok');
       setNotice(t('detail.accountSaved'));
     } catch (err) {
+      setNoticeTone('warn');
       setNotice(err instanceof ApiRequestError ? err.message : t('detail.error'));
     } finally {
       setSavingAccount(false);
@@ -142,7 +145,10 @@ export function CustomerDetail() {
     try {
       const updated = await api.updateCustomer(data.account.id, { status: next });
       setData({ ...data, account: updated });
+      setNoticeTone('ok');
+      setNotice(next === 'active' ? t('detail.enabledNote') : t('detail.disabledDone'));
     } catch (err) {
+      setNoticeTone('warn');
       setNotice(err instanceof ApiRequestError ? err.message : t('detail.error'));
     } finally {
       setTogglingStatus(false);
@@ -157,8 +163,10 @@ export function CustomerDetail() {
       const record = await api.updateEntitlements(data.account.id, { values });
       setData({ ...data, entitlements: record.values });
       setValues({ ...record.values });
+      setNoticeTone('ok');
       setNotice(t('ent.saved'));
     } catch (err) {
+      setNoticeTone('warn');
       setNotice(err instanceof ApiRequestError ? err.message : t('detail.error'));
     } finally {
       setSavingEnt(false);
@@ -166,18 +174,81 @@ export function CustomerDetail() {
   }
 
   if (loading) {
-    return <div className="cu-center">{t('detail.loading')}</div>;
+    return (
+      <div>
+        <button className="cu-backlink" onClick={() => navigate('/customers')}>
+          ← {t('detail.back')}
+        </button>
+        <div className="tn-pageheader" aria-hidden>
+          <div className="cu-name">
+            <span className="tn-skeleton cu-skel-avatar cu-skel-avatar--lg" />
+            <div className="cu-name__meta" style={{ gap: 8 }}>
+              <span className="tn-skeleton tn-skeleton--title" style={{ width: 200 }} />
+              <span className="tn-skeleton tn-skeleton--text" style={{ width: 120 }} />
+            </div>
+          </div>
+        </div>
+        <div className="cu-detail" aria-hidden>
+          <div className="tn-stack">
+            <Card>
+              <div className="tn-stack">
+                <span className="tn-skeleton tn-skeleton--block" />
+                <span className="tn-skeleton tn-skeleton--line" />
+                <span className="tn-skeleton tn-skeleton--line" style={{ width: '70%' }} />
+              </div>
+            </Card>
+            <Card>
+              <div className="tn-stack tn-stack--sm">
+                <span className="tn-skeleton tn-skeleton--line" style={{ width: '80%' }} />
+                <span className="tn-skeleton tn-skeleton--line" style={{ width: '55%' }} />
+              </div>
+            </Card>
+          </div>
+          <Card>
+            <div className="tn-stack">
+              <span className="tn-skeleton tn-skeleton--block" />
+              <span className="tn-skeleton tn-skeleton--block" />
+              <span className="tn-skeleton tn-skeleton--block" />
+            </div>
+          </Card>
+        </div>
+        <span className="tn-visually-hidden" role="status">
+          {t('detail.loading')}
+        </span>
+      </div>
+    );
   }
   if (loadError || !data) {
+    const notFound = !data || loadError === t('detail.notFound');
     return (
       <div>
         <button className="cu-backlink" onClick={() => navigate('/customers')}>
           ← {t('detail.back')}
         </button>
         <Card>
-          <p className="tn-muted" style={{ margin: 0 }}>
-            {loadError ?? t('detail.notFound')}
-          </p>
+          <div className="tn-state tn-state--error" role="alert">
+            <span className="tn-state__icon" aria-hidden>
+              {notFound ? '∅' : '!'}
+            </span>
+            <p className="tn-state__title">
+              {notFound ? t('detail.notFound') : t('detail.errorTitle')}
+            </p>
+            {!notFound && <p className="tn-state__body">{loadError}</p>}
+            <div className="tn-state__actions">
+              {!notFound && (
+                <Button variant="secondary" size="sm" onClick={() => void load()}>
+                  {t('translation:common.retry')}
+                </Button>
+              )}
+              <Button
+                variant={notFound ? 'primary' : 'ghost'}
+                size="sm"
+                onClick={() => navigate('/customers')}
+              >
+                {t('detail.back')}
+              </Button>
+            </div>
+          </div>
         </Card>
       </div>
     );
@@ -194,7 +265,7 @@ export function CustomerDetail() {
 
       <header className="tn-pageheader">
         <div className="cu-name">
-          <span className="cu-avatar">{account.name.slice(0, 2)}</span>
+          <span className="cu-avatar cu-avatar--lg">{account.name.slice(0, 2)}</span>
           <div>
             <h1 className="tn-pageheader__title" style={{ fontSize: 30 }}>
               {account.name}
@@ -218,8 +289,26 @@ export function CustomerDetail() {
         </div>
       </header>
 
-      {!isActive && <div className="cu-notice cu-notice--warn">{t('detail.disabledNote')}</div>}
-      {notice && <div className="cu-notice cu-notice--ok">{notice}</div>}
+      {!isActive && (
+        <div className="cu-notice cu-notice--warn" role="status">
+          <span className="cu-notice__icon" aria-hidden>
+            ⚠
+          </span>
+          <span>{t('detail.disabledNote')}</span>
+        </div>
+      )}
+      {notice && (
+        <div
+          className={`cu-notice cu-notice--${noticeTone}`}
+          role={noticeTone === 'warn' ? 'alert' : 'status'}
+          aria-live="polite"
+        >
+          <span className="cu-notice__icon" aria-hidden>
+            {noticeTone === 'warn' ? '⚠' : '✓'}
+          </span>
+          <span>{notice}</span>
+        </div>
+      )}
 
       <div className="cu-detail">
         {/* Account + owner + summary */}
@@ -279,7 +368,7 @@ export function CustomerDetail() {
           </Card>
 
           <Card title={t('detail.summary')}>
-            <div className="tn-grid tn-grid--stats" style={{ gap: 'var(--sp-md)' }}>
+            <div className="cu-summary">
               <div className="cu-mini">
                 <span className="cu-mini__value">{summary.farmCount}</span>
                 <span className="cu-mini__label">

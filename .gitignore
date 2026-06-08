@@ -23,3 +23,8 @@ expo-env.d.ts
 
 # archived snapshots (kept locally, not committed)
 _archive/
+
+# generated documentation (Sphinx HTML + Doxygen XML/HTML)
+docs/_build/
+docs/doxygen/html/
+docs/doxygen/xml/

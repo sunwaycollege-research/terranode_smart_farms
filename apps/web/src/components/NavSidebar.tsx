@@ -1,28 +1,37 @@
 import { NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import {
+  Users,
+  RadioTower,
+  Sprout,
+  BarChart3,
+  ScrollText,
+  Leaf,
+  type LucideIcon,
+} from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button } from './Button';
 
 interface NavItem {
   to: string;
   labelKey: string;
-  icon: string;
+  icon: LucideIcon;
 }
 
 const SECTIONS: { titleKey: string; items: NavItem[] }[] = [
   {
     titleKey: 'nav.management',
     items: [
-      { to: '/customers', labelKey: 'nav.customers', icon: '👤' },
-      { to: '/fleet', labelKey: 'nav.fleet', icon: '📡' },
-      { to: '/crops', labelKey: 'nav.crops', icon: '🌱' },
+      { to: '/customers', labelKey: 'nav.customers', icon: Users },
+      { to: '/fleet', labelKey: 'nav.fleet', icon: RadioTower },
+      { to: '/crops', labelKey: 'nav.crops', icon: Sprout },
     ],
   },
   {
     titleKey: 'nav.platform',
     items: [
-      { to: '/analytics', labelKey: 'nav.analytics', icon: '📊' },
-      { to: '/audit', labelKey: 'nav.audit', icon: '📜' },
+      { to: '/analytics', labelKey: 'nav.analytics', icon: BarChart3 },
+      { to: '/audit', labelKey: 'nav.audit', icon: ScrollText },
     ],
   },
 ];
@@ -40,7 +49,9 @@ export function NavSidebar() {
   return (
     <aside className="tn-sidebar">
       <div className="tn-sidebar__brand">
-        <div className="tn-sidebar__logo">🌱</div>
+        <div className="tn-sidebar__logo">
+          <Leaf size={20} strokeWidth={2.25} />
+        </div>
         <div>
           <div className="tn-sidebar__wordmark">{t('app.name')}</div>
           <div className="tn-sidebar__tag">{t('app.tagline')}</div>
@@ -51,20 +62,23 @@ export function NavSidebar() {
         {SECTIONS.map((section) => (
           <div key={section.titleKey}>
             <div className="tn-nav__section">{t(section.titleKey)}</div>
-            {section.items.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  `tn-nav__link${isActive ? ' is-active' : ''}`
-                }
-              >
-                <span className="tn-nav__icon" aria-hidden>
-                  {item.icon}
-                </span>
-                {t(item.labelKey)}
-              </NavLink>
-            ))}
+            {section.items.map((item) => {
+              const Icon = item.icon;
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    `tn-nav__link${isActive ? ' is-active' : ''}`
+                  }
+                >
+                  <span className="tn-nav__icon" aria-hidden>
+                    <Icon size={18} strokeWidth={2} />
+                  </span>
+                  {t(item.labelKey)}
+                </NavLink>
+              );
+            })}
           </div>
         ))}
       </nav>

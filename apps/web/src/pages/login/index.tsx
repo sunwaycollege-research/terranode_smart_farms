@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { Button, Card, LanguageSwitcher, TextField } from '../../components';
+import './login.css';
 
 interface LocationState {
   from?: { pathname: string };
@@ -21,6 +22,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState(isDev ? 'teranode' : '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Reuse the existing `demoHint` string for its (translated) leading label,
+  // then render the credentials ourselves as <code> for scannability.
+  // e.g. "Demo: {{email}} / {{password}}" -> "Demo".
+  const demoLabel = t('login.demoHint')
+    .split('{{email}}')[0]
+    .replace(/[\s:/]+$/, '')
+    .trim();
 
   if (!loading && isAuthenticated) {
     return <Navigate to={from} replace />;
@@ -42,17 +51,24 @@ export default function LoginPage() {
 
   return (
     <div className="tn-login">
-      <div className="tn-login__card">
+      <div className="tn-login__card lg-shell">
         <div className="tn-login__brand">
           <div className="tn-sidebar__logo">🌱</div>
           <div className="tn-login__title display">{t('app.name')}</div>
         </div>
 
         <Card title={t('login.title')} actions={<LanguageSwitcher />}>
-          <p className="tn-muted" style={{ marginTop: 0, marginBottom: 'var(--sp-lg)' }}>
-            {t('login.subtitle')}
-          </p>
-          <form className="tn-stack" onSubmit={onSubmit}>
+          <p className="lg-subtitle">{t('login.subtitle')}</p>
+
+          <form className="tn-stack" onSubmit={onSubmit} noValidate>
+            {error && (
+              <div className="lg-error" role="alert" aria-live="assertive">
+                <span className="lg-error__icon" aria-hidden>
+                  ⚠
+                </span>
+                <span>{error}</span>
+              </div>
+            )}
             <TextField
               label={t('login.email')}
               type="email"
@@ -61,6 +77,7 @@ export default function LoginPage() {
               onChange={setEmail}
               required
               autoFocus
+              aria-invalid={error ? true : undefined}
             />
             <TextField
               label={t('login.password')}
@@ -69,18 +86,26 @@ export default function LoginPage() {
               value={password}
               onChange={setPassword}
               required
-              error={error ?? undefined}
+              aria-invalid={error ? true : undefined}
             />
-            <Button type="submit" block loading={submitting}>
+            <Button type="submit" block loading={submitting} className="lg-submit">
               {submitting ? t('login.signingIn') : t('login.submit')}
             </Button>
           </form>
+
           {isDev && (
-            <p className="tn-login__hint">
-              {t('login.demoHint', { email: 'admin@teranode.io', password: 'teranode' })}
-            </p>
+            <div className="lg-hint">
+              <span className="lg-hint__label">{demoLabel}</span>
+              <code>admin@teranode.io</code>
+              <span className="lg-hint__sep" aria-hidden>
+                /
+              </span>
+              <code>teranode</code>
+            </div>
           )}
         </Card>
+
+        <p className="lg-foot">{t('app.tagline')}</p>
       </div>
     </div>
   );

@@ -1,0 +1,40 @@
+# Doxygen config for the TERANODE ESP32 firmware (C++ / Arduino .ino).
+# Produces XML (consumed by Sphinx/Breathe) + a standalone HTML reference.
+# Run from the docs/ directory:  doxygen doxygen/Doxyfile
+
+PROJECT_NAME           = "TERANODE Firmware"
+PROJECT_BRIEF          = "ESP32 field gateway — device-id-first provisioning, MQTT telemetry, edge irrigation control"
+OUTPUT_DIRECTORY       = doxygen
+
+# Inputs: the connected gateway firmware + the standalone device sketch.
+INPUT                  = ../firmware ../TerraNode
+FILE_PATTERNS          = *.ino *.cpp *.cc *.c *.h *.hpp
+RECURSIVE              = YES
+EXCLUDE_PATTERNS       = */node_modules/* */_build/* */terranode_wokwi_project/*
+
+# Treat Arduino sketches as C++.
+EXTENSION_MAPPING      = ino=C++
+OPTIMIZE_OUTPUT_FOR_C  = YES
+
+# Extract everything (the sketches are small and globals matter for firmware).
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+EXTRACT_PRIVATE        = YES
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+
+# Output formats.
+GENERATE_HTML          = YES
+GENERATE_XML           = YES      # <- Breathe reads doxygen/xml
+GENERATE_LATEX         = NO
+XML_PROGRAMLISTING     = YES
+HTML_OUTPUT            = html
+XML_OUTPUT             = xml
+
+# Quiet, but keep real errors visible.
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = NO
+WARN_NO_PARAMDOC       = NO
+HAVE_DOT               = NO

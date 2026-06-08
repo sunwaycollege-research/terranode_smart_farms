@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "author": "TerraNode",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-esp32-devkit-v1", "id": "esp", "top": 40, "left": 360, "attrs": {} },
+    { "type": "wokwi-dht22", "id": "dht", "top": -40, "left": 40, "attrs": {} },
+    { "type": "board-ssd1306", "id": "oled", "top": 175, "left": 45, "attrs": { "i2cAddress": "0x3c" } },
+    { "type": "wokwi-slide-switch", "id": "rain", "top": 335, "left": 80, "attrs": {} },
+
+    { "type": "wokwi-potentiometer", "id": "moist", "top": 20, "left": 125, "attrs": { "value": "30" } },
+    { "type": "wokwi-potentiometer", "id": "ph", "top": 20, "left": 640, "attrs": { "value": "50" } },
+    { "type": "wokwi-potentiometer", "id": "ec", "top": 160, "left": 640, "attrs": { "value": "35" } },
+    { "type": "wokwi-potentiometer", "id": "n", "top": 300, "left": 640, "attrs": { "value": "45" } },
+    { "type": "wokwi-potentiometer", "id": "p", "top": 440, "left": 640, "attrs": { "value": "45" } },
+    { "type": "wokwi-potentiometer", "id": "k", "top": 580, "left": 640, "attrs": { "value": "45" } },
+
+    { "type": "wokwi-led", "id": "pump", "top": 55, "left": 870, "attrs": { "color": "blue", "label": "PUMP" } },
+    { "type": "wokwi-led", "id": "valve", "top": 155, "left": 870, "attrs": { "color": "green", "label": "VALVE" } },
+    { "type": "wokwi-led", "id": "relay", "top": 255, "left": 870, "attrs": { "color": "red", "label": "RELAY" } },
+    { "type": "wokwi-resistor", "id": "rPump", "top": 85, "left": 815, "attrs": { "value": "220" } },
+    { "type": "wokwi-resistor", "id": "rValve", "top": 185, "left": 815, "attrs": { "value": "220" } },
+    { "type": "wokwi-resistor", "id": "rRelay", "top": 285, "left": 815, "attrs": { "value": "220" } }
+  ],
+  "connections": [
+    ["esp:3V3", "dht:VCC", "red", []],
+    ["esp:GND.1", "dht:GND", "black", []],
+    ["esp:18", "dht:SDA", "yellow", []],
+
+    ["esp:3V3", "oled:VCC", "red", []],
+    ["esp:GND.1", "oled:GND", "black", []],
+    ["esp:21", "oled:SDA", "green", []],
+    ["esp:22", "oled:SCL", "blue", []],
+
+    ["esp:3V3", "rain:3", "red", []],
+    ["esp:19", "rain:2", "purple", []],
+    ["esp:GND.1", "rain:1", "black", []],
+
+    ["esp:3V3", "moist:VCC", "red", []],
+    ["esp:GND.1", "moist:GND", "black", []],
+    ["esp:34", "moist:SIG", "orange", []],
+
+    ["esp:3V3", "ph:VCC", "red", []],
+    ["esp:GND.2", "ph:GND", "black", []],
+    ["esp:35", "ph:SIG", "orange", []],
+
+    ["esp:3V3", "ec:VCC", "red", []],
+    ["esp:GND.2", "ec:GND", "black", []],
+    ["esp:32", "ec:SIG", "orange", []],
+
+    ["esp:3V3", "n:VCC", "red", []],
+    ["esp:GND.2", "n:GND", "black", []],
+    ["esp:33", "n:SIG", "orange", []],
+
+    ["esp:3V3", "p:VCC", "red", []],
+    ["esp:GND.2", "p:GND", "black", []],
+    ["esp:36", "p:SIG", "orange", []],
+
+    ["esp:3V3", "k:VCC", "red", []],
+    ["esp:GND.2", "k:GND", "black", []],
+    ["esp:39", "k:SIG", "orange", []],
+
+    ["esp:26", "rPump:1", "blue", []],
+    ["rPump:2", "pump:A", "blue", []],
+    ["pump:C", "esp:GND.2", "black", []],
+
+    ["esp:27", "rValve:1", "green", []],
+    ["rValve:2", "valve:A", "green", []],
+    ["valve:C", "esp:GND.2", "black", []],
+
+    ["esp:14", "rRelay:1", "red", []],
+    ["rRelay:2", "relay:A", "red", []],
+    ["relay:C", "esp:GND.2", "black", []]
+  ],
+  "dependencies": {}
+}

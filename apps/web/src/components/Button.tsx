@@ -31,9 +31,23 @@ export function Button({
     .filter(Boolean)
     .join(' ');
 
+  const onAccent = variant === 'primary' || variant === 'danger';
+
   return (
-    <button className={classes} disabled={disabled || loading} {...rest}>
-      {loading ? <span aria-hidden>…</span> : icon}
+    <button
+      className={classes}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      {...rest}
+    >
+      {loading ? (
+        <span
+          className={`tn-spinner${onAccent ? ' tn-spinner--on-primary' : ''}`}
+          aria-hidden
+        />
+      ) : (
+        icon
+      )}
       {children}
     </button>
   );

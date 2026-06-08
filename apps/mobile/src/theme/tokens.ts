@@ -9,37 +9,57 @@ export const colors = {
   // text / ink
   ink: '#1a1916',
   inkSoft: '#3a352e',
-  muted: '#6b6457',
-  subtle: '#8a8275',
+  // `muted` is used for secondary copy & H3 eyebrows — darkened slightly so it
+  // clears WCAG AA (~4.7:1) on the parchment bg for low-vision / sunlight use.
+  muted: '#615b4e',
+  subtle: '#7c7567',
+  // Text that sits on a filled colour surface (primary/accent/danger buttons,
+  // dark chips). Near-white but warm so it matches the parchment palette.
+  onColor: '#fdfcf8',
 
   // surfaces
   bg: '#f6f3ec',
   bgWarm: '#efeadd',
   surface: '#ffffff',
   surface2: '#f0ecdf',
+  // translucent ink for scrims / pressed overlays.
+  overlay: 'rgba(26,25,22,0.45)',
 
   // borders
   border: '#d8d2c2',
   borderSoft: '#e6e0d0',
   borderStrong: '#b8b0a0',
+  // hairline for dense lists / dividers.
+  hairline: '#e9e3d5',
+  // focus / keyboard ring — uses brand green so it reads as intentional.
+  focus: '#3f6b4e',
 
   // brand
   primary: '#3f6b4e', // deep forest/olive green  (oklch .40 .06 145)
   primarySoft: '#e4efe2',
   primaryInk: '#2f5740',
+  // pressed shade of primary for tactile button feedback.
+  primaryPressed: '#345b41',
   accent: '#bd6a43', // terracotta (oklch .60 .15 45)
   accentSoft: '#f2e7da',
+  accentPressed: '#a85a37',
 
-  // signal palette (status)
+  // signal palette (status) — paired soft tints + a darker "ink" per signal so
+  // status text can sit on its own soft chip with strong contrast.
   watering: '#3f78c9', // blue
   wateringSoft: '#e4edf7',
-  healthy: '#3fa564', // green
+  wateringInk: '#2c5da3',
+  healthy: '#3fa564', // green = good
+  healthySoft: '#e1f1e7',
+  healthyInk: '#2f7d4c',
   dry: '#d9a23b', // amber/sun
-  warn: '#d99a2e',
+  warn: '#c98a1e', // amber = watch  (darkened for AA on light chips)
   warnSoft: '#f6ecd6',
-  critical: '#c14a3b', // red
+  warnInk: '#9c6c12',
+  critical: '#c14a3b', // red = act
   criticalSoft: '#f5e2dd',
-  offline: '#8a8275', // grey
+  criticalInk: '#9e3527',
+  offline: '#7c7567', // grey
 } as const;
 
 export const radius = {

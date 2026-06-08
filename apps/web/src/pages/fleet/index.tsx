@@ -9,7 +9,7 @@
 // All DTOs come from @teranode/types via the shared `api` client; visuals reuse the
 // parchment + soil component primitives (Card / Table / Badge / Button / fields).
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
   ComputeKind,
@@ -32,6 +32,7 @@ import {
   type Column,
 } from '../../components';
 import { api, ApiRequestError } from '../../api/client';
+import './fleet.css';
 
 // --- local copy (fleet-specific strings live here; i18n bundle is owned elsewhere) --
 
@@ -95,15 +96,59 @@ const COPY = {
   pushOta: 'Push update',
   pushing: 'Pushing…',
   otaAccepted: 'Update accepted — gateway will fetch {{fw}} on next check-in.',
+  delete: 'Delete',
+  deleteTitle: 'Delete device',
+  deleteIntro:
+    'Permanently remove {{serial}} and its device tokens. Any zones it serves are detached (not deleted). This cannot be undone.',
+  confirmDelete: 'Delete device',
+  deleting: 'Deleting…',
   reload: 'Refresh',
   summaryTotal: 'Devices',
   summaryOnline: 'Online',
   summaryOffline: 'Offline',
   summaryClaimed: 'Claimed',
   summaryUnbound: 'In stock',
-  empty: 'No gateways registered yet. Register a serial to get started.',
+  filterAll: 'All',
+  filterOnline: 'Online',
+  filterOffline: 'Offline',
+  filterClaimed: 'Claimed',
+  filterInStock: 'In stock',
+  showingCount_one: '{{count}} device',
+  showingCount_other: '{{count}} devices',
+  emptyTitle: 'No gateways yet',
+  empty: 'No gateways registered yet. Register a serial above to get started.',
+  emptyFiltered: 'No devices match this filter.',
+  clearFilter: 'Clear filter',
   loadError: 'Could not load the fleet.',
 };
+
+/** Fleet-health status filter buckets (mirror the summary tiles). */
+type StatusFilter = 'all' | 'online' | 'offline' | 'claimed' | 'instock';
+
+const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
+  { key: 'all', label: COPY.filterAll },
+  { key: 'online', label: COPY.filterOnline },
+  { key: 'offline', label: COPY.filterOffline },
+  { key: 'claimed', label: COPY.filterClaimed },
+  { key: 'instock', label: COPY.filterInStock },
+];
+
+/** Does a gateway status fall into the given filter bucket? "In stock" mirrors
+ *  the summary's `unbound` count, which the API folds revoked devices into. */
+function matchesFilter(status: FleetGateway['gateway']['status'], filter: StatusFilter): boolean {
+  switch (filter) {
+    case 'all':
+      return true;
+    case 'online':
+      return status === 'online';
+    case 'offline':
+      return status === 'offline';
+    case 'claimed':
+      return status === 'claimed';
+    case 'instock':
+      return status === 'unbound' || status === 'revoked';
+  }
+}
 
 const COMPUTE_OPTIONS = [
   { value: 'esp32', label: 'ESP32' },
@@ -137,18 +182,10 @@ function batteryTone(pct: number) {
 
 // --- small inline UI ----------------------------------------------------------
 
-const overlayStyle: React.CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  zIndex: 40,
-  display: 'grid',
-  placeItems: 'center',
-  padding: 'var(--sp-xl)',
-  background: 'rgba(26, 25, 22, 0.42)',
-  backdropFilter: 'blur(2px)',
-};
-
-/** A lightweight centered modal built on the Card primitive. */
+/** A lightweight centered modal built on the Card primitive.
+ *  Adds dialog semantics (role/aria-modal/labelledby), Esc-to-close, body
+ *  scroll-lock, and initial focus so keyboard + screen-reader users land in
+ *  the dialog rather than the page behind it. */
 function Modal({
   title,
   onClose,
@@ -160,18 +197,48 @@ function Modal({
   children: React.ReactNode;
   width?: number;
 }) {
+  const titleId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    // Lock background scroll while the dialog is open.
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    // Move focus into the dialog (first focusable, else the panel itself).
+    const focusable = panelRef.current?.querySelector<HTMLElement>(
+      'input, select, textarea, button, [tabindex]:not([tabindex="-1"])',
+    );
+    (focusable ?? panelRef.current)?.focus();
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
   }, [onClose]);
 
   return (
-    <div style={overlayStyle} onMouseDown={onClose}>
-      <div style={{ width: '100%', maxWidth: width }} onMouseDown={(e) => e.stopPropagation()}>
-        <Card title={title} actions={<Button variant="ghost" size="sm" onClick={onClose}>✕</Button>}>
+    <div className="fl-overlay" onMouseDown={onClose}>
+      <div
+        ref={panelRef}
+        className="fl-modal"
+        style={{ maxWidth: width }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <Card
+          title={<span id={titleId}>{title}</span>}
+          actions={
+            <button type="button" className="fl-close" aria-label="Close" onClick={onClose}>
+              ✕
+            </button>
+          }
+        >
           {children}
         </Card>
       </div>
@@ -179,19 +246,15 @@ function Modal({
   );
 }
 
+/** Inline error message — uses the shared danger alert so contrast + spacing
+ *  match every other admin surface (replaces a hand-rolled hex pill). */
 function ErrorNote({ children }: { children: React.ReactNode }) {
   return (
-    <p
-      style={{
-        margin: 0,
-        padding: '9px 12px',
-        borderRadius: 'var(--r2)',
-        background: 'var(--critical-soft)',
-        color: '#9a3a2e',
-        fontSize: 13,
-      }}
-    >
-      {children}
+    <p className="tn-alert tn-alert--danger" role="alert" style={{ margin: 0 }}>
+      <span className="tn-alert__icon" aria-hidden>
+        !
+      </span>
+      <span className="tn-alert__body">{children}</span>
     </p>
   );
 }
@@ -237,7 +300,7 @@ function RegisterCard({ onRegistered }: { onRegistered: (r: RegisterGatewayRespo
   return (
     <Card title={COPY.register}>
       <form className="tn-stack" onSubmit={submit}>
-        <p className="tn-muted" style={{ margin: 0, fontSize: 13 }}>
+        <p className="fl-note">
           {COPY.registerHint}
         </p>
         <div className="tn-grid tn-grid--2" style={{ alignItems: 'end' }}>
@@ -297,23 +360,15 @@ function TokenModal({
   return (
     <Modal title={COPY.tokenTitle} onClose={onClose} width={520}>
       <div className="tn-stack">
-        <div className="tn-row" style={{ gap: 'var(--sp-sm)' }}>
-          <span className="tn-muted" style={{ fontSize: 13 }}>{COPY.serial}</span>
-          <code style={{ fontWeight: 600 }}>{data.gateway.serial}</code>
+        <div className="fl-token-serial">
+          <span className="fl-muted-sm">{COPY.serial}</span>
+          <code>{data.gateway.serial}</code>
         </div>
-        <ErrorNote>{COPY.tokenWarn}</ErrorNote>
-        <div
-          style={{
-            padding: 'var(--sp-md) var(--sp-lg)',
-            borderRadius: 'var(--r2)',
-            border: '1px dashed var(--border-strong)',
-            background: 'var(--surface-2)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 13,
-            wordBreak: 'break-all',
-            color: 'var(--ink)',
-          }}
-        >
+        <p className="tn-alert tn-alert--warn" role="alert" style={{ margin: 0 }}>
+          <span className="tn-alert__icon" aria-hidden>⚠</span>
+          <span className="tn-alert__body">{COPY.tokenWarn}</span>
+        </p>
+        <div className="fl-token" role="textbox" aria-readonly aria-label={COPY.tokenTitle}>
           {data.deviceToken}
         </div>
         <div className="tn-row">
@@ -378,7 +433,7 @@ function BindModal({
   return (
     <Modal title={COPY.bindTitle} onClose={onClose}>
       <form className="tn-stack" onSubmit={submit}>
-        <p className="tn-muted" style={{ margin: 0, fontSize: 13 }}>
+        <p className="fl-note">
           {COPY.bindIntro.replace('{{serial}}', row.gateway.serial)}
         </p>
         {farmOptions.length > 0 ? (
@@ -393,7 +448,7 @@ function BindModal({
             }}
           />
         ) : (
-          <p className="tn-muted" style={{ margin: 0, fontSize: 13 }}>
+          <p className="fl-note">
             {COPY.noFarms}
           </p>
         )}
@@ -463,7 +518,7 @@ function ClaimModal({
   return (
     <Modal title={COPY.claimTitle} onClose={onClose}>
       <form className="tn-stack" onSubmit={submit}>
-        <p className="tn-muted" style={{ margin: 0, fontSize: 13 }}>
+        <p className="fl-note">
           {COPY.claimIntro.replace('{{serial}}', row.gateway.serial)}
         </p>
         {customers.length > 0 ? (
@@ -475,7 +530,7 @@ function ClaimModal({
             onChange={setAccountId}
           />
         ) : (
-          <p className="tn-muted" style={{ margin: 0, fontSize: 13 }}>
+          <p className="fl-note">
             {COPY.noCustomers}
           </p>
         )}
@@ -530,7 +585,7 @@ function OtaModal({
   return (
     <Modal title={COPY.otaTitle} onClose={onClose}>
       <form className="tn-stack" onSubmit={submit}>
-        <p className="tn-muted" style={{ margin: 0, fontSize: 13 }}>
+        <p className="fl-note">
           {COPY.otaIntro
             .replace('{{serial}}', row.gateway.serial)
             .replace('{{fw}}', row.gateway.fwVersion)}
@@ -548,17 +603,11 @@ function OtaModal({
         />
         {error && <ErrorNote>{error}</ErrorNote>}
         {accepted && (
-          <p
-            style={{
-              margin: 0,
-              padding: '9px 12px',
-              borderRadius: 'var(--r2)',
-              background: 'var(--healthy-soft)',
-              color: '#2f7d4b',
-              fontSize: 13,
-            }}
-          >
-            {COPY.otaAccepted.replace('{{fw}}', accepted)}
+          <p className="tn-alert tn-alert--success" role="status" style={{ margin: 0 }}>
+            <span className="tn-alert__icon" aria-hidden>✓</span>
+            <span className="tn-alert__body">
+              {COPY.otaAccepted.replace('{{fw}}', accepted)}
+            </span>
           </p>
         )}
         <div className="tn-row">
@@ -575,11 +624,89 @@ function OtaModal({
   );
 }
 
+// --- delete-confirm modal -----------------------------------------------------
+
+function DeleteModal({
+  row,
+  onClose,
+  onDeleted,
+}: {
+  row: FleetGateway;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.deleteGateway(row.gateway.id);
+      onDeleted();
+    } catch (err) {
+      setError(errMsg(err, 'Delete failed.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title={COPY.deleteTitle} onClose={onClose}>
+      <form className="tn-stack" onSubmit={submit}>
+        <div className="fl-token-serial">
+          <span className="fl-muted-sm">{COPY.serial}</span>
+          <code>{row.gateway.serial}</code>
+        </div>
+        <p className="tn-alert tn-alert--danger" role="alert" style={{ margin: 0 }}>
+          <span className="tn-alert__icon" aria-hidden>⚠</span>
+          <span className="tn-alert__body">
+            {COPY.deleteIntro.replace('{{serial}}', row.gateway.serial)}
+          </span>
+        </p>
+        {error && <ErrorNote>{error}</ErrorNote>}
+        <div className="tn-row">
+          <Button variant="ghost" type="button" onClick={onClose}>
+            Cancel
+          </Button>
+          <span className="tn-spacer" />
+          <Button variant="danger" type="submit" loading={busy}>
+            {busy ? COPY.deleting : COPY.confirmDelete}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// --- loading skeleton ---------------------------------------------------------
+
+/** Skeleton rows that mirror the fleet table's column rhythm, shown while the
+ *  first fetch is in flight (replaces a bare "Loading…" line). */
+function FleetSkeleton({ rows = 5 }: { rows?: number }) {
+  return (
+    <div className="fl-skel-table" aria-hidden>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div className="fl-skel-row" key={i}>
+          <span className="tn-skeleton tn-skeleton--line" style={{ width: '70%' }} />
+          <span className="tn-skeleton tn-skeleton--line" style={{ width: '60%' }} />
+          <span className="tn-skeleton tn-skeleton--line" style={{ width: '50%' }} />
+          <span className="tn-skeleton tn-skeleton--line" style={{ width: '80%' }} />
+          <span className="tn-skeleton tn-skeleton--line" style={{ width: '45%' }} />
+          <span className="tn-skeleton tn-skeleton--line" style={{ width: '55%' }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // --- battery cell -------------------------------------------------------------
 
 function BatteryCell({ row }: { row: FleetGateway }) {
   if (row.nodes.length === 0) {
-    return <span className="tn-muted" style={{ fontSize: 13 }}>{COPY.noNodes}</span>;
+    return <span className="fl-muted-sm">{COPY.noNodes}</span>;
   }
   const batteries = row.nodes
     .map((n) => n.battery)
@@ -588,15 +715,85 @@ function BatteryCell({ row }: { row: FleetGateway }) {
   const count = row.nodes.length;
   const nodeLabel = count === 1 ? '1 node' : `${count} nodes`;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+    <div className="fl-battery">
       {min !== null ? (
         <Badge tone={batteryTone(min)}>
-          <span style={{ fontFamily: 'var(--font-mono)' }}>{min}%</span>
+          <span className="fl-battery__pct">{min}%</span>
         </Badge>
       ) : (
-        <span className="tn-muted" style={{ fontSize: 13 }}>—</span>
+        <span className="fl-muted-sm">—</span>
       )}
-      <span className="tn-muted" style={{ fontSize: 11 }}>{nodeLabel}</span>
+      <span className="fl-battery__nodes">{nodeLabel}</span>
+    </div>
+  );
+}
+
+// --- summary tile (clickable → drives the status filter) ----------------------
+
+function StatTile({
+  label,
+  value,
+  hint,
+  filter,
+  active,
+  onSelect,
+}: {
+  label: string;
+  value: number;
+  hint?: string;
+  filter: StatusFilter;
+  active: StatusFilter;
+  onSelect: (f: StatusFilter) => void;
+}) {
+  const isActive = active === filter;
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(isActive && filter !== 'all' ? 'all' : filter)}
+      aria-pressed={isActive}
+      title={`Filter devices: ${label}`}
+      className={`fl-tile${isActive ? ' is-active' : ''}`}
+    >
+      <Stat label={label} value={value} hint={hint} />
+    </button>
+  );
+}
+
+// --- status filter bar (All / Online / Offline / Claimed / In-stock) ----------
+
+function StatusFilterBar({
+  value,
+  onChange,
+  count,
+}: {
+  value: StatusFilter;
+  onChange: (f: StatusFilter) => void;
+  count?: number;
+}) {
+  return (
+    <div className="fl-toolbar">
+      <div className="fl-filters" role="tablist" aria-label="Filter devices by status">
+        {STATUS_FILTERS.map((f) => (
+          <Button
+            key={f.key}
+            size="sm"
+            role="tab"
+            aria-selected={value === f.key}
+            variant={value === f.key ? 'secondary' : 'ghost'}
+            onClick={() => onChange(f.key)}
+          >
+            {f.label}
+          </Button>
+        ))}
+      </div>
+      {count !== undefined && (
+        <span className="fl-count" aria-live="polite">
+          {(count === 1 ? COPY.showingCount_one : COPY.showingCount_other).replace(
+            '{{count}}',
+            String(count),
+          )}
+        </span>
+      )}
     </div>
   );
 }
@@ -612,8 +809,10 @@ export default function FleetPage() {
   const [bindRow, setBindRow] = useState<FleetGateway | null>(null);
   const [otaRow, setOtaRow] = useState<FleetGateway | null>(null);
   const [claimRow, setClaimRow] = useState<FleetGateway | null>(null);
+  const [deleteRow, setDeleteRow] = useState<FleetGateway | null>(null);
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [allFarms, setAllFarms] = useState<FarmOption[]>([]);
+  const [filter, setFilter] = useState<StatusFilter>('all');
   const mounted = useRef(true);
 
   const load = useCallback(async () => {
@@ -715,13 +914,20 @@ export default function FleetPage() {
 
   const summary = data?.summary;
 
+  // Fleet-health filter: narrow the device table to a single status bucket.
+  const allRows = data?.gateways ?? [];
+  const filteredRows = useMemo(
+    () => allRows.filter((row) => matchesFilter(row.gateway.status, filter)),
+    [allRows, filter],
+  );
+
   const columns: Column<FleetGateway>[] = [
     {
       header: COPY.colSerial,
       cell: (row) => (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <code style={{ fontWeight: 600 }}>{row.gateway.serial}</code>
-          <span className="tn-muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        <div className="fl-cell">
+          <code className="fl-serial">{row.gateway.serial}</code>
+          <span className="fl-meta">
             {row.gateway.model ? `${row.gateway.model} · ${row.gateway.compute}` : row.gateway.compute}
           </span>
         </div>
@@ -737,27 +943,21 @@ export default function FleetPage() {
     },
     {
       header: COPY.colFirmware,
-      cell: (row) => (
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>
-          v{row.gateway.fwVersion}
-        </span>
-      ),
+      cell: (row) => <span className="fl-fw">v{row.gateway.fwVersion}</span>,
     },
     {
       header: COPY.colBinding,
       cell: (row) =>
         row.farm ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ fontWeight: 500 }}>{row.farm.name}</span>
-            <span className="tn-muted" style={{ fontSize: 12 }}>
-              {row.account?.name ?? COPY.noFarm}
-            </span>
+          <div className="fl-cell">
+            <span className="fl-cell__primary">{row.farm.name}</span>
+            <span className="fl-cell__secondary">{row.account?.name ?? COPY.noFarm}</span>
           </div>
         ) : row.account ? (
           // Claimed to a customer but not yet booted (no farm provisioned yet).
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ fontWeight: 500 }}>{row.account.name}</span>
-            <span className="tn-muted" style={{ fontSize: 12 }}>{COPY.claimedTo}</span>
+          <div className="fl-cell">
+            <span className="fl-cell__primary">{row.account.name}</span>
+            <span className="fl-cell__secondary">{COPY.claimedTo}</span>
           </div>
         ) : (
           <Badge tone="offline">{COPY.inStock}</Badge>
@@ -770,7 +970,7 @@ export default function FleetPage() {
     {
       header: COPY.colLastSeen,
       cell: (row) => (
-        <span className="tn-muted" style={{ fontSize: 13 }}>{timeAgo(row.gateway.lastSeen)}</span>
+        <span className="fl-muted-sm">{timeAgo(row.gateway.lastSeen)}</span>
       ),
     },
     {
@@ -788,6 +988,9 @@ export default function FleetPage() {
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setOtaRow(row)}>
             {COPY.ota}
+          </Button>
+          <Button size="sm" variant="danger" onClick={() => setDeleteRow(row)}>
+            {COPY.delete}
           </Button>
         </div>
       ),
@@ -809,27 +1012,70 @@ export default function FleetPage() {
       <div className="tn-stack">
         {summary && (
           <div className="tn-grid tn-grid--stats">
-            <Stat label={COPY.summaryTotal} value={summary.total} />
-            <Stat
+            <StatTile
+              label={COPY.summaryTotal}
+              value={summary.total}
+              filter="all"
+              active={filter}
+              onSelect={setFilter}
+            />
+            <StatTile
               label={COPY.summaryOnline}
               value={summary.online}
               hint={`${summary.total ? Math.round((summary.online / summary.total) * 100) : 0}% reporting`}
+              filter="online"
+              active={filter}
+              onSelect={setFilter}
             />
-            <Stat label={COPY.summaryOffline} value={summary.offline} />
-            <Stat label={COPY.summaryClaimed} value={summary.claimed} />
-            <Stat label={COPY.summaryUnbound} value={summary.unbound} />
+            <StatTile
+              label={COPY.summaryOffline}
+              value={summary.offline}
+              filter="offline"
+              active={filter}
+              onSelect={setFilter}
+            />
+            <StatTile
+              label={COPY.summaryClaimed}
+              value={summary.claimed}
+              filter="claimed"
+              active={filter}
+              onSelect={setFilter}
+            />
+            <StatTile
+              label={COPY.summaryUnbound}
+              value={summary.unbound}
+              filter="instock"
+              active={filter}
+              onSelect={setFilter}
+            />
           </div>
         )}
 
         <RegisterCard onRegistered={(r) => { setToken(r); void load(); }} />
 
-        <Card title={COPY.fleetTitle} flush>
+        <Card
+          title={COPY.fleetTitle}
+          actions={
+            !loading && !error && allRows.length > 0 ? (
+              <StatusFilterBar
+                value={filter}
+                onChange={setFilter}
+                count={filteredRows.length}
+              />
+            ) : undefined
+          }
+          flush
+        >
           {loading ? (
-            <p className="tn-muted" style={{ padding: 'var(--sp-xl)' }}>{t('common.loading')}</p>
+            <FleetSkeleton />
           ) : error ? (
-            <div style={{ padding: 'var(--sp-xl)' }} className="tn-stack">
-              <ErrorNote>{error}</ErrorNote>
-              <div>
+            <div className="tn-state tn-state--error" role="alert">
+              <span className="tn-state__icon" aria-hidden>
+                !
+              </span>
+              <span className="tn-state__title">{COPY.loadError}</span>
+              <p className="tn-state__body">{error}</p>
+              <div className="tn-state__actions">
                 <Button variant="secondary" size="sm" onClick={() => void load()}>
                   {t('common.retry')}
                 </Button>
@@ -838,9 +1084,31 @@ export default function FleetPage() {
           ) : (
             <Table<FleetGateway>
               columns={columns}
-              rows={data?.gateways ?? []}
+              rows={filteredRows}
               rowKey={(row) => row.gateway.id}
-              empty={COPY.empty}
+              empty={
+                allRows.length === 0 ? (
+                  <div className="tn-state">
+                    <span className="tn-state__icon" aria-hidden>
+                      ▦
+                    </span>
+                    <span className="tn-state__title">{COPY.emptyTitle}</span>
+                    <p className="tn-state__body">{COPY.empty}</p>
+                  </div>
+                ) : (
+                  <div className="tn-state">
+                    <span className="tn-state__icon" aria-hidden>
+                      ⌕
+                    </span>
+                    <span className="tn-state__title">{COPY.emptyFiltered}</span>
+                    <div className="tn-state__actions">
+                      <Button variant="secondary" size="sm" onClick={() => setFilter('all')}>
+                        {COPY.clearFilter}
+                      </Button>
+                    </div>
+                  </div>
+                )
+              }
             />
           )}
         </Card>
@@ -873,6 +1141,16 @@ export default function FleetPage() {
           onClaimed={(gw) => {
             patchGateway(gw);
             setClaimRow(null);
+          }}
+        />
+      )}
+      {deleteRow && (
+        <DeleteModal
+          row={deleteRow}
+          onClose={() => setDeleteRow(null)}
+          onDeleted={() => {
+            setDeleteRow(null);
+            void load();
           }}
         />
       )}
