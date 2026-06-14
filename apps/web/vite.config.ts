@@ -1,20 +1,24 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// TERANODE web admin (Vite + React 18 + TS).
-// VITE_API_URL defaults to the local API; override via env for other targets.
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    port: 5173,
-    host: true,
-  },
-  preview: {
-    port: 5173,
-  },
-  define: {
-    'import.meta.env.VITE_API_URL': JSON.stringify(
-      process.env.VITE_API_URL ?? 'http://localhost:4000',
-    ),
-  },
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+
+  const apiUrl  = env.VITE_API_URL ?? 'http://localhost:4000';
+  const port    = parseInt(env.PORT ?? '5173', 10);
+
+  return {
+    plugins: [react()],
+    server: {
+      port,
+      host: true,   // listen on 0.0.0.0 so LAN devices can reach it
+    },
+    preview: {
+      port,
+      host: true,
+    },
+    define: {
+      'import.meta.env.VITE_API_URL': JSON.stringify(apiUrl),
+    },
+  };
 });
