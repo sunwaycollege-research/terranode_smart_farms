@@ -1,0 +1,13 @@
+I am setting up the TerraNode backend stack on this Raspberry Pi. The repo is already pulled. I need you to:
+
+1. Find where the repo is cloned on this machine (check home directory and common locations)
+2. Check if Docker is installed and running, if not install it
+3. Check if Node.js 20+ and npm are installed, if not install them
+4. Start the Docker stack from infra/ using docker compose up -d
+5. Wait for TimescaleDB to be healthy then run npm run migrate:admin from apps/api/
+6. Start the API (npm run dev -w @teranode/api), ingest (npm run dev -w @teranode/ingest), and web panel (npm run dev -w @teranode/web) — run each as a background process with logs going to /tmp/api.log, /tmp/ingest.log, /tmp/web.log
+7. Wait 5 seconds then verify all three are reachable on localhost: curl http://localhost:4000/health, curl http://localhost:5173, and check MQTT on port 1883
+8. Find this machine's current IP using hostname -I and report it
+9. If anything fails, diagnose and fix it — check logs, install missing dependencies, fix port conflicts
+
+Report back with: which services started successfully, the machine's IP, and any errors you hit.
