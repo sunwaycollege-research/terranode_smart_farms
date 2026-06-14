@@ -22,8 +22,8 @@
 // ── Device identity ──────────────────────────────────────────────────────────
 #define DEVICE_SERIAL_DEFAULT  "TN-ESP32-BHUWAN"
 #define DEVICE_SECRET_DEFAULT  "tn-bhuwan-sim-2026"
-#define API_BASE_DEFAULT       "http://10.59.10.242:4000"
-#define MQTT_HOST_DEFAULT      "10.59.10.242"
+#define API_BASE_DEFAULT       "http://10.59.10.5:4000"
+#define MQTT_HOST_DEFAULT      "10.59.10.5"
 #define WIFI_SSID_DEFAULT      "SunwayForAI"
 #define WIFI_PASS_DEFAULT      "Sunway@123"
 #define FW_VERSION             "1.0.0"
